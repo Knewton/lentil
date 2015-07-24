@@ -8,19 +8,18 @@ from __future__ import division
 
 from abc import abstractmethod
 from collections import OrderedDict
-import math
 import copy
+import logging
+import math
 import sys
 import time
-import logging
 
-import numpy as np
 from matplotlib import pyplot as plt
-from scipy import optimize
-from scipy import sparse
+import numpy as np
+from scipy import optimize, sparse
 
-from lentil import models
-from lentil import grad
+from . import models
+from . import grad
 
 
 _logger = logging.getLogger(__name__)
@@ -47,37 +46,38 @@ def gradient_descent(
         assessment interactions, and lesson interactions as input,
         and outputs values for gradients and the cost function
         evaluated with current parameter values
-
+        QUESTION: Can you point to an example?
     :param dict[str, np.ndarray] params: Parameters allowed to vary
-
-    :param dict[str, function] param_constraint_funcs:
-        Functions that enforce bounds on parameters
-
-    :param float eta: Adagrad parameter
-    :param float eps: Adagrad parameter
-    :param bool debug_mode_on: True => dump plots
+    :param dict[str, function] param_constraint_funcs: Functions that enforce bounds on parameters
+        QUESTION: What sorts of functions should these be?
+    :param bool using_adagrad: Whether to use Adagrad
+    :param float ftol: QUESTION
+    :param float rate: QUESTION
+    :param float eta: Adagrad parameter QUESTION More descriptive?
+    :param float eps: Adagrad parameter QUESTION Ditto?
+    :param bool debug_mode_on: True => dump plots QUESTION where?
     :param int num_checkpoints: Number of times to print "Iteration #" during updates
     :rtype: dict[str, np.ndarray]
     :return: Parameter values at which gradient descent "converges"
     """
-    if eta<=0:
-        raise ValueError('Invalid eta!')
-    if eps<=0:
-        raise ValueError('Invalid eps!')
-    if num_checkpoints<=1:
-        raise ValueError('Invalid number of checkpoints!')
+    if eta <= 0:
+        raise ValueError('eta must be postive not {}'.format(eta))
+    if eps <= 0:
+        raise ValueError('eps must be positive not {}'.format(eps))
+    if num_checkpoints <= 1:
+        raise ValueError('Must have at least two checkpoints not {}'.format(num_checkpoints))
 
     if using_adagrad:
         # historical gradient (for Adagrad)
-        hg = {k: np.zeros(v.shape) for k, v in params.iteritems()}
+        hg = {k: np.zeros_like(v) for k, v in params.iteritems()}
 
-    est_training_steps = 1000
+    est_training_steps = 1000 # QUESTION: Why is this hard coded?
     checkpoint_iter_step = max(1, est_training_steps // num_checkpoints)
     is_checkpoint = lambda idx: idx % checkpoint_iter_step == 0
 
     if verify_gradient:
-        # check accuracy of gradient function
-        # using finite differences
+        # check accuracy of gradient function using finite differences
+        # QUESTION Why is this here and not in a test suite?
         g, cst = grads(params)
 
         epsilon = 1e-9 # epsilon upper bound
@@ -87,16 +87,19 @@ def gradient_descent(
                 continue
             fd = [] # gradient components computed with finite difference method
             cf = [] # gradient components computed with closed form expression
+            # QUESTION: Why all the flattens and not ravel?
             for i, c in enumerate(v.flatten()):
                 for _ in xrange(num_samples):
                     nparams = copy.deepcopy(params)
                     delta = epsilon * c
 
+                    # QUESTION: Why do you need to flatten instead of just broadcasting?
                     nparams[k] = nparams[k].flatten()
                     nparams[k][i] += delta
                     nparams[k] = np.reshape(nparams[k], params[k].shape)
                     _, ncst = grads(nparams)
 
+                    # QUESTION: Ditto
                     nparams[k] = nparams[k].flatten()
                     nparams[k][i] -= 2 * delta
                     nparams[k] = np.reshape(nparams[k], params[k].shape)
@@ -105,6 +108,8 @@ def gradient_descent(
                     fd.append((ncst - pcst) / (2 * delta))
                 cf += [c] * num_samples
 
+            # QUESTION: Bad idea to call plt directly instead of first creating a figure
+            #           Leads to races and all that jazz
             plt.title('Components of Cost Gradient w.r.t. %s' % k)
             plt.xlabel('From Finite Differences')
             plt.ylabel('From Closed Form Expression')
@@ -124,11 +129,14 @@ def gradient_descent(
                 pass
 
     costs = []
+    # What is gs?
     gs = {k: [] for k in params}
 
     start_time = time.time()
 
     iter_idx = 0
+    # QUESTION: It looks like you actually don't actually need sys.maxint, and this isn't
+    #           really an int at all. Maybe a comment and setting equal to 2 * ftol or something
     rel_diff = sys.maxint
     while True:
         g, cst = grads(params)
@@ -151,26 +159,29 @@ def gradient_descent(
             rel_diff = (cst - costs[-2]) / costs[-2]
 
         if is_checkpoint(iter_idx):
-            _logger.debug('Iteration %d, rel_diff=%f' % (iter_idx, rel_diff))
-            _logger.debug('Running at %f seconds per iteration' % (
-                (time.time() - start_time) / (iter_idx+1)))
+            _logger.debug('Iteration %d, rel_diff=%f', iter_idx, rel_diff)
+            _logger.debug('Running at %f seconds per iteration',
+                (time.time() - start_time) / (iter_idx + 1))
 
         if abs(rel_diff) <= ftol:
             break
 
+        # QUESTION: It is bold not to set a max_iter
         iter_idx += 1
 
     if debug_mode_on:
+        # Ditto the boldness of using plt directly Especially without a clear or anything
         plt.xlabel('Iteration')
         plt.ylabel('Cost')
         plt.plot(costs)
         plt.show()
         for k, v in gs.iteritems():
-            plt.ylabel('L2-norm-squared of g'+k)
+            plt.ylabel('L2-norm-squared of g' + k)
             plt.plot(v)
             plt.show()
 
     return params
+
 
 class EmbeddingMAPEstimator(object):
     """
