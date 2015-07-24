@@ -1,0 +1,43 @@
+# compiled code
+*.pyc
+
+# swap files
+*.swp
+*.swo
+*~
+*#
+
+# apple cruft
+.DS_Store
+
+# py.test artifacts
+__pycache__
+
+# log files
+*.log
+
+# coverage files
+.coverage
+coverage.xml
+htmlcov
+
+# ide files
+.komodoproject
+.komodotools
+.classpath
+.project
+.pydevproject
+.settings
+.idea
+*.iml
+*.ipr
+*.iws
+
+# build files
+target
+dist/
+*.egg-info/
+build/
+MANIFEST
+
+.tox/

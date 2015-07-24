@@ -1,0 +1,158 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>est &mdash; Probabilistic Course Embedding 0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="Probabilistic Course Embedding 0 documentation" href="index.html" />
+    <link rel="next" title="grad" href="grad.html" />
+    <link rel="prev" title="cgraph" href="cgraph.html" />
+   
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9">
+
+  </head>
+  <body role="document">  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="module-est">
+<span id="est"></span><h1>est<a class="headerlink" href="#module-est" title="Permalink to this headline">¶</a></h1>
+<p>Module for estimating model parameters
+&#64;author Siddharth Reddy &lt;<a class="reference external" href="mailto:sgr45&#37;&#52;&#48;cornell&#46;edu">sgr45<span>&#64;</span>cornell<span>&#46;</span>edu</a>&gt;
+01/07/15</p>
+<dl class="class">
+<dt id="est.EmbeddingMAPEstimator">
+<em class="property">class </em><code class="descclassname">est.</code><code class="descname">EmbeddingMAPEstimator</code><span class="sig-paren">(</span><em>regularization_constant=1e-06</em>, <em>ftol=0.001</em>, <em>gradient_descent_kwargs={}</em>, <em>initial_param_vals={}</em>, <em>using_scipy=True</em>, <em>verify_gradient=False</em>, <em>debug_mode_on=False</em>, <em>filtered_history=None</em>, <em>split_history=None</em><span class="sig-paren">)</span><a class="headerlink" href="#est.EmbeddingMAPEstimator" title="Permalink to this definition">¶</a></dt>
+<dd><p>Trains a model on an interaction history by computing
+maximum a posteriori estimates of model parameters</p>
+<dl class="method">
+<dt id="est.EmbeddingMAPEstimator.fit_model">
+<code class="descname">fit_model</code><span class="sig-paren">(</span><em>model</em><span class="sig-paren">)</span><a class="headerlink" href="#est.EmbeddingMAPEstimator.fit_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>Use gradient descent to perform maximum a posteriori
+estimation of model parameters. Relies on hand-coded gradient.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>model</strong> (<a class="reference internal" href="models.html#models.EmbeddingModel" title="models.EmbeddingModel"><em>EmbeddingModel</em></a>) &#8211; A skill embedding model
+that needs to be fit to its interaction history</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="est.gradient_descent">
+<code class="descclassname">est.</code><code class="descname">gradient_descent</code><span class="sig-paren">(</span><em>grads</em>, <em>params</em>, <em>param_constraint_funcs</em>, <em>eta=0.001</em>, <em>eps=0.1</em>, <em>rate=0.005</em>, <em>ftol=0.001</em>, <em>num_checkpoints=10</em>, <em>using_adagrad=True</em>, <em>debug_mode_on=False</em>, <em>verify_gradient=False</em><span class="sig-paren">)</span><a class="headerlink" href="#est.gradient_descent" title="Permalink to this definition">¶</a></dt>
+<dd><p>Batch gradient descent</p>
+<p>Optionally uses Adagrad to compute adaptive learning rate</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>grads</strong> (<em>function</em>) &#8211; A function that takes parameter values,
+assessment interactions, and lesson interactions as input,
+and outputs values for gradients and the cost function
+evaluated with current parameter values</li>
+<li><strong>np.ndarray] params</strong> (<em>dict[str,</em>) &#8211; Parameters allowed to vary</li>
+<li><strong>function] param_constraint_funcs</strong> (<em>dict[str,</em>) &#8211; Functions that enforce bounds on parameters</li>
+<li><strong>eta</strong> (<em>float</em>) &#8211; Adagrad parameter</li>
+<li><strong>eps</strong> (<em>float</em>) &#8211; Adagrad parameter</li>
+<li><strong>debug_mode_on</strong> (<em>bool</em>) &#8211; True =&gt; dump plots</li>
+<li><strong>num_checkpoints</strong> (<em>int</em>) &#8211; Number of times to print &#8220;Iteration #&#8221; during updates</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body"><p class="first">dict[str, np.ndarray]</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last">Parameter values at which gradient descent &#8220;converges&#8221;</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper"><div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="cgraph.html" title="previous chapter">cgraph</a></li>
+      <li>Next: <a href="grad.html" title="next chapter">grad</a></li>
+  </ul></li>
+</ul>
+</div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/est.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2015, Siddharth Reddy.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 1.3.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.6</a>
+      
+      |
+      <a href="_sources/est.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
