@@ -1,16 +1,17 @@
 """
 Module for skill model evaluation
+
 @author Siddharth Reddy <sgr45@cornell.edu>
 01/09/15
 """
 
 from __future__ import division
 
-import click
-import time
-import random
 import logging
+import random
+import time
 
+import click
 import pandas as pd
 import numpy as np
 from sklearn import cross_validation, metrics
@@ -29,9 +30,8 @@ def cross_validated_auc(
     num_folds=10,
     random_truncations=False):
     """
-    Use k-fold cross-validation evaluate
-    the predictive power of an embedding model
-    on an interaction history
+    Use k-fold cross-validation to evaluate the predictive power of an
+    embedding model on an interaction history
 
     :param dict[str, function] model_builders:
         A dictionary that maps the name of a model to a function
@@ -55,10 +55,11 @@ def cross_validated_auc(
         (training roc auc, validation roc auc)
     """
     if num_folds <= 1:
-        raise ValueError('Too few folds!')
+        raise ValueError('Too few folds! Must be at least 1 not {}'.format(num_folds))
     num_students = history.num_students()
     if num_folds > num_students:
-        raise ValueError('Too many folds!')
+        raise ValueError('Too many folds! Must be at most num_students ({}) not {}'.format(
+                         num_students, num_folds))
 
     # initialize persistent variables
     df = history.data
@@ -85,12 +86,13 @@ def cross_validated_auc(
 
         :param set[str] left_out_student_ids: Left-out students
         :rtype: (pd.Series, pd.DataFrame, tuple, pd.DataFrame, set[str])
-        :return: Useful transformations of the training set
+        :return: Useful transformations of the training set QUESTION more detail?
         """
 
         # prepare for left-out student history truncations
         not_in_beginning = df['timestep'] > 2
         is_assessment_ixn = df['module_type'] == datatools.AssessmentInteraction.MODULETYPE
+        # QUESTION: Why can't you use isin?
         left_out = df['student_id'].apply(lambda x: x in left_out_student_ids)
         grouped = df[not_in_beginning & is_assessment_ixn & left_out].groupby('student_id')
 
@@ -104,6 +106,7 @@ def cross_validated_auc(
             student_cut_loc = grouped.timestep.apply(np.random.choice) - 1
         else:
             # truncate just before the last batch of assessment ixns for each student
+            # QUESTION: Does this mean that you have to use_lessons for this to work?
             student_cut_loc = grouped.timestep.max() - 1
 
         # get timesteps where left-out student histories get truncated
@@ -125,9 +128,8 @@ def cross_validated_auc(
             filtered_history=filtered_history)
 
         # get assessment ixns in training set
-        train_assessment_interactions = filtered_history[(
-            filtered_history['module_type'])==(
-            datatools.AssessmentInteraction.MODULETYPE)]
+        train_assessment_interactions = filtered_history[
+            filtered_history['module_type']==datatools.AssessmentInteraction.MODULETYPE]
 
         # get set of unique assessment modules in training set
         training_assessments = set(
@@ -146,11 +148,8 @@ def cross_validated_auc(
         """
         Train models on training set
 
-        :param pd.DataFrame filtered_history:
-        Interaction history after student truncations
-
-        :param (list, list) split_history:
-        A tuple of assessment ixns and lesson ixns
+        :param pd.DataFrame filtered_history: Interaction history after student truncations
+        :param (list, list) split_history: A tuple of assessment ixns and lesson ixns
         """
 
         for k, build_model in model_builders.iteritems():
@@ -166,24 +165,17 @@ def cross_validated_auc(
         """
         Collect true labels and predicted probabilities
 
-        :param pd.DataFrame train_assessment_interactions:
-        Assessment ixns in training set
-
+        :param pd.DataFrame train_assessment_interactions: Assessment ixns in training set
         :param pd.DataFrame val_interactions: Assessment ixns in validation set
         :rtype: (list[{1,-1}], list[float], list[{1,-1}], list[float])
         :return: (true labels for training set,
-        predicted probabilities for training set,
-        true labels for validation set,
-        predicted probabilities for validation set)
+                  predicted probabilities for training set,
+                  true labels for validation set,
+                  predicted probabilities for validation set)
         """
 
-        train_y_true = list(
-            train_assessment_interactions['outcome'].apply(
-                lambda outcome: 1 if outcome else -1))
-
-        val_y_true = list(
-            val_interactions['outcome'].apply(
-                lambda outcome: 1 if outcome else -1))
+        train_y_true = (2 * train_assessment_interactions['outcome'] - 1).values
+        val_y_true = (2 * val_interactions['outcome'] - 1).values
 
         for k, model in models.iteritems():
             _logger.info('Evaluating %s model...', k)
@@ -201,7 +193,7 @@ def cross_validated_auc(
         Add the current fold's training and validation AUCs to err.
         This function is called at the end of each cross-validation run.
 
-        :param dict[str->(list[float], list[float])] err:
+        :param dict[str, (list[float], list[float])] err:
             A dictionary that maps model name to lists
             of training and validation AUCs across folds
 
@@ -234,7 +226,8 @@ def cross_validated_auc(
                 # i.e., pass outcomes
                 val_roc_auc = 0
 
-            _logger.debug("%f %f %s" % (train_roc_auc, val_roc_auc, k))
+            # QUESTION: More informative debug message please
+            _logger.debug("%f %f %s", train_roc_auc, val_roc_auc, k)
 
             err[k].append((train_roc_auc, val_roc_auc))
 
@@ -248,17 +241,15 @@ def cross_validated_auc(
     for fold_idx, (_, val_student_idxes) in enumerate(kf):
         _logger.info('Processing fold %d of %d', fold_idx+1, num_folds)
 
-        left_out_student_ids = {history.id_of_student_idx(
-            int(student_idx)) for student_idx in val_student_idxes}
+        left_out_student_ids = {history.id_of_student_idx(int(student_idx))
+            for student_idx in val_student_idxes}
 
         (
             truncations, filtered_history, split_history,
             train_assessment_interactions,
             training_assessments) = get_training_set(left_out_student_ids)
 
-        train_models(
-            filtered_history,
-            split_history)
+        train_models(filtered_history, split_history)
 
         # validation interactions = assessment interactions that occur
         # immediately after the truncated histories of left-out students
@@ -279,6 +270,7 @@ def cross_validated_auc(
 
     return err
 
+# QUESTION: Do you want to add some helps?
 @click.command()
 @click.argument('history_file', type=click.Path(exists=True))
 @click.option('--verbose', is_flag=True)
@@ -433,4 +425,6 @@ def cli(
         val_auc_avg + 1.96 * val_auc_stderr))
 
 if __name__ == '__main__':
+    # QUESTION: Be warned, executing files from within packages can be annoying difficult.
+    # If you setup your scripts this way, consider entry_points
     cli()

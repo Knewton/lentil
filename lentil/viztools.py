@@ -4,9 +4,12 @@ Module for visualizing skill embeddings
 01/08/15
 """
 
-import matplotlib
+# QUESTION My one comment on this file is that it is generally better not to call plt
+# directly for plotting in non-interactive mode
+
 import logging
 
+import matplotlib
 from matplotlib import pyplot as plt
 import numpy as np
 

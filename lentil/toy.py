@@ -7,11 +7,12 @@ Module for constructing toy interaction histories
 import math
 import random
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-from lentil import datatools
 from lentil import datasynth
+from lentil import datatools
+
 
 def get_1d_embedding_history():
     """
@@ -35,6 +36,7 @@ def get_1d_embedding_history():
 
     data = []
 
+    # QUESTION Why aren't you using the below functions here?
     data.append(
         {'module_id' : 'A1',
         'module_type' : datatools.AssessmentInteraction.MODULETYPE,
@@ -104,6 +106,7 @@ def get_1d_embedding_history():
     history.squash_timesteps()
 
     return history
+
 
 def get_assessment_grid_model(
     embedding_dimension=2,
@@ -215,6 +218,7 @@ def get_assessment_grid_model(
 
     return model
 
+
 def get_independent_assessments_history():
     """
     A two-dimensional embedding, where an intransitivity in assessment
@@ -226,7 +230,9 @@ def get_independent_assessments_history():
     are behind the requirements for A1 and A2. McLovin passes both
     assessments, so his skill levels are beyond the requirements for A1
     and A2. Evan and Seth are each able to pass one assessment but not
-    the other. Since the assessments have independent requirements, this
+    the other.
+
+    Since the assessments have independent requirements, this
     implies that Evan and Seth have independent skill sets
     (i.e. Evan has enough of skill 2 to pass A2 but not enough of
     skill 1 to pass A1, and Seth has enough of skill 1 to pass A1
@@ -262,22 +268,25 @@ def get_independent_assessments_history():
 
 def get_independent_lessons_history():
     """
+    QUESTION Figure references make no sense here
     We replicate the setting in Figure \ref{fig:superbad}, then add two
     new students Slater and Michaels, and two new lesson modules L1
     and L2. Slater is initially identical to Evan, while Michaels is
     initially identical to Seth. Slater reads lesson L1, then passes
     assessments A1 and A2. Michaels reads lesson L2, then passes
-    assessments A1 and A2. The key observation here is that the skill
-    gain vectors recovered for the two lesson modules are orthogonal,
-    meaning they help students satisfy completely independent skill
-    requirements. This makes sense, since initially Slater was lacking
-    in Skill 1 while Michaels was lacking in Skill 2, but after completing
-    their lessons they passed their assessments, showing that they gained
-    from their respective lessons what they were lacking initially.
+    assessments A1 and A2.
+
+    The key observation here is that the skill gain vectors recovered for the
+    two lesson modules are orthogonal, meaning they help students satisfy
+    completely independent skill requirements. This makes sense, since initially
+    Slater was lacking in Skill 1 while Michaels was lacking in Skill 2, but after
+    completing their lessons they passed their assessments, showing that they
+    gained from their respective lessons what they were lacking initially.
     """
 
     data = []
 
+    # These two functions seem to get used a lot. Why not pull them out and pass data?
     def complete_lesson(lesson_id, student_id, timestep):
         data.append(
             {'module_id' : lesson_id,
@@ -326,19 +335,23 @@ def get_independent_lessons_history():
 
     return history
 
+
 def get_lesson_prereqs_history():
     """
+    QUESTION \ref{fig:superbad} makes no sense here.
     We replicate the setting in Figure \ref{fig:superbad}, then add a new
     assessment module A3 and a new lesson module L1. All students
     initially fail assessment A3, then read lesson L1, after which
-    McLovin passes A3 while everyone else still fails A3. The key
-    observation here is that McLovin is the only student who initially
-    satisfies the prerequisites for L1, so he is the only student who
-    realizes significant gains.
+    McLovin passes A3 while everyone else still fails A3.
+
+    The key observation here is that McLovin is the only student who initially
+    satisfies the prerequisites for L1, so he is the only student who realizes
+    significant gains.
     """
 
     data = []
 
+    # QUESTION: Perhaps you want to name j timestep?
     def complete_assessment(assessment_id, student_id, outcome, j):
         data.append(
             {'module_id' : assessment_id,

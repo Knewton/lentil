@@ -58,7 +58,7 @@ class SkillModel(object):
         :rtype: float
         :return: Log-likelihood of outcome, given student and content parameters
         """
-        return
+        pass
 
     def assessment_pass_likelihood(
         self,
@@ -115,6 +115,8 @@ class EmbeddingModel(SkillModel):
         """
         Initialize skill model object
 
+        QUESTION: You're missing a couple parameters
+
         :param datatools.InteractionHistory|None history:
             An interaction history
         :param int embedding_dimension:
@@ -145,6 +147,7 @@ class EmbeddingModel(SkillModel):
             (while other embedding parameters are constrained to be
             non-negative)
         """
+        # QUESTION More informative messages: don't use "Invalid"; use Invalid because"
         if embedding_dimension<=0:
             raise ValueError('Invalid embedding dimension!')
         if learning_update_variance_constant<=0:

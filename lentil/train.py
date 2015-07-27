@@ -18,6 +18,7 @@ from lentil import est
 _logger = logging.getLogger(__name__)
 
 
+# QUESTION Do you want some helps here?
 @click.command()
 @click.argument('history_file', type=click.Path(exists=True))
 @click.argument('model_file', type=click.Path(exists=False))

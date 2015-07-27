@@ -203,32 +203,36 @@ class EmbeddingMAPEstimator(object):
         """
         Initialize estimator object
 
+        QUESTION: You're missing some arguments
+
         :param float regularization_constant: Coefficient of L2 regularizer
             in cost function
-
         :param dict[str, object] gradient_descent_kwargs:
             Arguments for gradient_descent
-
         :param dict[str, np.ndarray] initial_param_vals: For warm starts
         :param bool using_scipy:
             True => use scipy.optimize.minimize,
             False => use batch gradient descent
-
         :param bool verify_gradient:
             True => use scipy.optimize.check_grad to verify accuracy of analytic gradient,
-
         :param bool debug_mode_on:
             True => print checkpoints and dump plots
         """
-        if regularization_constant<0:
-            raise ValueError('Invalid regularizer coefficient!')
-        if ftol<=0:
-            raise ValueError('Invalid ftol!')
+        if regularization_constant < 0:
+            raise ValueError(('regularization_constant must be '
+                              'nonnegative not {}').format(regularization_constant))
+        if ftol <= 0:
+            raise ValueError('ftol must be positive not {}'.format(ftol))
 
-        if type(regularization_constant) is float:
-            # same regularization constant for all embedding parameters
+        try:
+            # if a number is passed, use same regularization constant for all embedding parameters
             # (students, assessments, lessons, prereqs, and concepts)
+            regularization_constant = float(regularization_constant)
             regularization_constant = [regularization_constant] * 5
+        except TypeError:
+            if len(regularization_constant) != 5:
+                raise ValueError('regularization_constant must be '
+                    'either a number or a list of length 5')
 
         self.regularization_constant = regularization_constant
         self.gradient_descent_kwargs = gradient_descent_kwargs
@@ -282,25 +286,21 @@ class EmbeddingMAPEstimator(object):
             models.CONCEPT_EMBEDDINGS : constraint_func,
         }
 
-        params = OrderedDict((k,
-                param_constraint_funcs[k](k,
-                    self.initial_param_vals[k]) if k in \
-                self.initial_param_vals else param_constraint_funcs[k](k,
-                    np.random.random(v))) for k, v in param_shapes.iteritems())
+        params = OrderedDict()
+        for key, value in param_shapes.iteritems():
+            if key in self.initial_param_vals:
+                params[key] = param_constraint_funcs[key](key, self.initial_param_vals[key])
+            else:
+                params[key] = param_constraint_funcs[key](key, np.random.random(value))
 
         if self.split_history is None:
-            (
-                assessment_interactions,
-                lesson_interactions,
-                timestep_of_last_interaction) = model.history.split_interactions_by_type(
-                filtered_history=self.filtered_history)
+            (assessment_interactions, lesson_interactions, timestep_of_last_interaction) = \
+                model.history.split_interactions_by_type(filtered_history=self.filtered_history)
         else:
-            (
-                assessment_interactions,
-                lesson_interactions,
-                timestep_of_last_interaction) = self.split_history
+            (assessment_interactions, lesson_interactions, timestep_of_last_interaction) = \
+                self.split_history
 
-        if assessment_interactions == []:
+        if len(assessment_interactions) == 0:
             raise ValueError('No assessment interactions in history!')
 
         grads = grad.get_grad(
@@ -308,10 +308,9 @@ class EmbeddingMAPEstimator(object):
             using_lessons=model.using_lessons,
             using_prereqs=model.using_prereqs)
 
+        # QUESTION: Be warned that .size returns the number of nonzero entries in sparse matrices
         param_sizes = {k: v.size for k, v in params.iteritems()}
-        param_vals = np.concatenate([v.flatten(
-            ) for v in params.itervalues(
-            )], axis=0)
+        param_vals = np.concatenate([v.ravel() for v in params.itervalues()], axis=0)
 
         (
             student_idxes_for_assessment_ixns,
@@ -341,6 +340,8 @@ class EmbeddingMAPEstimator(object):
             shape=(num_students, num_assessment_ixns)).tocsr()
 
         num_timesteps = model.history.duration()
+        # QUESTION: Why will this matrix have the specified shape? sifai // num_timesteps
+        # still has size num_students, no?
         student_bias_participation_in_assessment_ixns = sparse.coo_matrix(
             (assessment_ixns_participation_matrix_entries,
                 (student_idxes_for_assessment_ixns // num_timesteps,
@@ -412,7 +413,7 @@ class EmbeddingMAPEstimator(object):
             entries = np.ones(len(prereq_idxes))
             num_entries = len(entries)
             entry_idxes = np.arange(0, num_entries, 1)
-            prereq_edge_concept_idxes = prereq_idxes, postreq_idxes
+            prereq_edge_concept_idxes = (prereq_idxes, postreq_idxes)
             concept_participation_in_prereqs = sparse.coo_matrix(
                 (entries, (prereq_idxes, entry_idxes)),
                 shape=(num_concepts, num_entries)).tocsr()
@@ -433,12 +434,14 @@ class EmbeddingMAPEstimator(object):
         last_prereq_embedding_idx = last_lesson_embedding_idx + (
             param_sizes[models.PREREQ_EMBEDDINGS]) if model.using_prereqs else None
         if model.using_lessons:
-            last_student_bias_idx = (
-                last_prereq_embedding_idx if model.using_prereqs else (
-                    last_lesson_embedding_idx)) + param_sizes[models.STUDENT_BIASES]
+            if model.using_prereqs:
+                last_student_bias_idx = last_lesson_embedding_idx
+            else:
+                last_student_bias_idx = last_lesson_embedding_idx
+            last_student_bias_idx += param_sizes[models.STUDENT_BIASES]
         else:
-            last_student_bias_idx = last_assessment_embedding_idx + (
-                param_sizes[models.STUDENT_BIASES])
+            last_student_bias_idx = last_assessment_embedding_idx + \
+                param_sizes[models.STUDENT_BIASES]
 
         last_assessment_bias_idx = last_student_bias_idx + param_sizes[models.ASSESSMENT_BIASES]
         (
@@ -458,6 +461,10 @@ class EmbeddingMAPEstimator(object):
         if model.using_graph_prior:
             regularization_constants[last_assessment_bias_idx:] = regularization_constant_for_concept_embeddings
 
+        # QUESTION: All of the above code seems to indicate that to use_prereqs you have to
+        # use_lessons. Is that documneted anywhere?
+
+        # QUESTION: What are the two box constraints?
         box_constraints_of_parameters = {
             models.STUDENT_EMBEDDINGS : (
                 model.anti_singularity_lower_bounds[models.STUDENT_EMBEDDINGS],
@@ -478,11 +485,13 @@ class EmbeddingMAPEstimator(object):
                 None) if model.using_graph_prior else None
         }
         box_constraints = np.concatenate(
-            [[box_constraints_of_parameters[k]] * v.size for (
-                k, v) in params.iteritems()])
+            [[box_constraints_of_parameters[k]] * v.size for (k, v) in params.iteritems()])
 
         gradient_holder = np.zeros(param_vals.shape)
 
+        # QUESTION: So, as a matter of style, passing this many arguments in an untyped
+        # language is extremely dangerous and unmaintainable. Consider passing them as
+        # kwargs.
         grad_args = [
             assessment_interactions,
             lesson_interactions,
@@ -528,6 +537,8 @@ class EmbeddingMAPEstimator(object):
             # with shape (num_students, num_timesteps, embedding_dimension),
             # so let's switch back to (num_students,
             # embedding_dimension, num_timesteps)
+
+            # QUESTION: Why is this inconsistent? Document where this went wrong
             params[models.STUDENT_EMBEDDINGS] = np.reshape(
                 params[models.STUDENT_EMBEDDINGS],
                 (model.student_embeddings.shape[0],
@@ -541,10 +552,9 @@ class EmbeddingMAPEstimator(object):
                     param_vals,
                     tuple([param_shapes] + grad_args)) / math.sqrt(param_vals.size)
 
-                if self.debug_mode_on:
-                    _logger.debug(
-                        'Root-mean-squared error of (forward) finite difference \
-                        vs. analytic gradient = %f' % (self.fd_err))
+                _logger.debug(
+                    'Root-mean-squared error of (forward) finite difference \
+                    vs. analytic gradient = %f', self.fd_err)
 
             map_estimates = optimize.minimize(
                 grads,
@@ -560,6 +570,8 @@ class EmbeddingMAPEstimator(object):
 
             # reshape parameter estimates from flattened array
             # into tensors and matrices
+
+            # QUESTION: Ditto above question
             params[models.STUDENT_EMBEDDINGS] = np.reshape(
                 map_estimates.x[:last_student_embedding_idx],
                 (model.student_embeddings.shape[0],

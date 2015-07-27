@@ -1,12 +1,12 @@
 Lentil - Latent Skill Embedding
--------------------------------
+===============================
 
 A package for training, evaluation, and visualization of the Latent Skill
 Embedding model with interaction log data. Read more about the model at
 http://siddharth.io/research.
 
 Usage
-=====
+-----
 
 You can install the package in your environment with
 
@@ -29,7 +29,7 @@ and provide example invocations of most functions and classes.
 QUESTION: There are no notebooks in this repo
 
 Documentation
-=============
+-------------
 
 Build the documentation with
 
@@ -41,6 +41,6 @@ Once run, open doc/_build/html/index.html for Sphinx documentation on the
 various modules in the package.
 
 Questions and comments
-======================
+----------------------
 
 Please contact the author if you have questions or find bugs.

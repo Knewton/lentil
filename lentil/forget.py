@@ -20,11 +20,11 @@ class TimeVaryingLUVModel(object):
         :param np.array times_since_prev_ixn_for_lesson_ixns:
             Time since the previous interaction, for each lesson interaction
 
-        :rtype: np.array
+        :rtype: np.ndarray
         :return: A list of penalty terms that get subtracted
             from the means of Gaussian learning updates
         """
-        return
+        pass
 
 
 class LinearLUVModel(TimeVaryingLUVModel):
@@ -69,6 +69,8 @@ class LogisticLUVModel(TimeVaryingLUVModel):
         """
         Initialize a linear model of time-varying learning update variance
 
+        QUESTION: What does the coeff vs the offset represent here?
+
         :param float alpha: Coefficient
         :param float beta: Offset
         """
@@ -90,6 +92,8 @@ class LogisticLUVModel(TimeVaryingLUVModel):
         return self.beta / (1 + np.exp(-self.alpha * np.log(
             times_since_prev_ixn_for_lesson_ixns+1)))
 
+# QUESTION: Ditto below having a bit more description about Coefficient and Offset
+
 
 class ForgettingModel(object):
     """
@@ -102,12 +106,12 @@ class ForgettingModel(object):
         :param np.array times_since_prev_ixn_for_lesson_ixns:
             Time since the previous interaction, for each lesson interaction
 
-        :rtype: np.array
+        :rtype: np.ndarray
         :return: A list of penalty terms that get subtracted
             from the means of Gaussian learning updates,
             one for each lesson interaction
         """
-        return
+        pass
 
 
 class LinearForgettingModel(ForgettingModel):
