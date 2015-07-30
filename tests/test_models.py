@@ -1,8 +1,7 @@
 """
-Module for unit tests that check if estimated embeddings
-for toy examples satisfy basic intuitions
+Module for unit tests that check if estimated embeddings for toy examples satisfy basic intuitions
+
 @author Siddharth Reddy <sgr45@cornell.edu>
-07/15/15
 """
 
 import unittest
@@ -14,6 +13,7 @@ import numpy as np
 from lentil import models
 from lentil import est
 from lentil import toy
+
 
 logging.basicConfig()
 _logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ class TestModels(unittest.TestCase):
         """
         A one-dimensional embedding, where a single latent skill is enough
         to explain the data. The key observation here is that the model
-        recovered positive skill gains for L1, and ``correctly" arranged
+        recovered positive skill gains for L1, and "correctly" arranged
         students and assessments in the latent space. Initially, Carter
         fails both assessments, so his skill level is behind the requirements
         of both assessments. Lee passes A1 but fails A2, so his skill
@@ -160,7 +160,7 @@ class TestModels(unittest.TestCase):
 
     def test_independent_lessons(self):
         """
-        We replicate the setting in Figure \ref{fig:superbad}, then add two
+        We replicate the setting in test_independent_assessments, then add two
         new students Slater and Michaels, and two new lesson modules L1
         and L2. Slater is initially identical to Evan, while Michaels is
         initially identical to Seth. Slater reads lesson L1, then passes
@@ -189,7 +189,8 @@ class TestModels(unittest.TestCase):
         gradient_descent_kwargs = {
             'using_adagrad' : False,
             'rate' : 0.1,
-            'debug_mode_on' : False
+            'debug_mode_on' : False,
+            'ftol' : 1e-4
         }
 
         using_scipy_configs = [True, False]
@@ -241,7 +242,7 @@ class TestModels(unittest.TestCase):
 
     def test_lesson_prereqs(self):
         """
-        We replicate the setting in Figure \ref{fig:superbad}, then add a new
+        We replicate the setting in test_independent_assessments, then add a new
         assessment module A3 and a new lesson module L1. All students
         initially fail assessment A3, then read lesson L1, after which
         McLovin passes A3 while everyone else still fails A3. The key
@@ -299,7 +300,7 @@ class TestModels(unittest.TestCase):
                 self.assertTrue((fogell[:, 0] <= model.assessment_embeddings[i, :]).any())
                 self.assertTrue((fogell[:, 1] <= model.assessment_embeddings[i, :]).any())
 
-            eps = models.ANTI_SINGULARITY_LOWER_BOUND
+            eps = 0.1
             for i in xrange(2):
                 self.assertTrue((seth[:, i] >= a1 - eps).all() and (seth[:, i] > a1 - eps).any())
                 self.assertTrue((seth[:, i] < a2).any())
@@ -310,8 +311,6 @@ class TestModels(unittest.TestCase):
                 self.assertTrue((evan[:, i] < a1).any())
                 self.assertTrue((evan[:, i] < a3).any())
 
-            _logger.debug(mclovin[:, 1])
-            _logger.debug(model.assessment_embeddings)
             self.assertTrue((mclovin[:, 1] > model.assessment_embeddings[:, :]).all())
 
             # prereq satisfaction term
@@ -321,5 +320,8 @@ class TestModels(unittest.TestCase):
             self.assertTrue(prereq_sat(mclovin[0]) > prereq_sat(seth[0]))
             self.assertTrue(prereq_sat(mclovin[0]) > prereq_sat(evan[0]))
 
+    # TODO: add unit tests for tv_luv_model, forgetting_model, and using_graph_prior=True
+
 if __name__ == '__main__':
     unittest.main()
+

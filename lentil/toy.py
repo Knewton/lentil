@@ -1,7 +1,7 @@
 """
 Module for constructing toy interaction histories
+
 @author Siddharth Reddy <sgr45@cornell.edu>
-04/05/15
 """
 
 import math
@@ -10,15 +10,15 @@ import random
 import numpy as np
 import pandas as pd
 
-from lentil import datasynth
-from lentil import datatools
+from . import datasynth
+from . import datatools
 
 
 def get_1d_embedding_history():
     """
     A one-dimensional embedding, where a single latent skill is enough
     to explain the data. The key observation here is that the model
-    recovered positive skill gains for L1, and ``correctly" arranged
+    recovered positive skill gains for L1, and "correctly" arranged
     students and assessments in the latent space. Initially, Carter
     fails both assessments, so his skill level is behind the requirements
     of both assessments. Lee passes A1 but fails A2, so his skill
@@ -32,90 +32,71 @@ def get_1d_embedding_history():
     lesson L1 and after completing the lesson implies that L1 had a
     positive effect on Lee and Carter's skill levels, hence the non-zero
     skill gain vector recovered for L1.
+    
+    :rtype: datatools.InteractionHistory
+    :return: A toy interaction history
     """
 
     data = []
 
-    # QUESTION Why aren't you using the below functions here?
-    data.append(
-        {'module_id' : 'A1',
-        'module_type' : datatools.AssessmentInteraction.MODULETYPE,
-        'outcome' : True,
-        'student_id' : 'Lee',
-        'timestep' : 1})
-    data.append(
-        {'module_id' : 'A1',
-        'module_type' : datatools.AssessmentInteraction.MODULETYPE,
-        'outcome' : False,
-        'student_id' : 'Carter',
-        'timestep' : 1})
-    data.append(
-        {'module_id' : 'A2',
-        'module_type' : datatools.AssessmentInteraction.MODULETYPE,
-        'outcome' : False,
-        'student_id' : 'Lee',
-        'timestep' : 2})
-    data.append(
-        {'module_id' : 'A2',
-        'module_type' : datatools.AssessmentInteraction.MODULETYPE,
-        'outcome' : False,
-        'student_id' : 'Carter',
-        'timestep' : 2})
+    def complete_assessment(student_id, assessment_id, outcome, timestep):
+        data.append(
+            {'module_id' : assessment_id,
+            'module_type' : datatools.AssessmentInteraction.MODULETYPE,
+            'outcome' : outcome,
+            'student_id' : student_id,
+            'timestep' : timestep})
 
-    data.append(
-        {'module_id' : 'L1',
-        'module_type' : datatools.LessonInteraction.MODULETYPE,
-        'outcome' : None,
-        'student_id' : 'Lee',
-        'timestep' : 3})
-    data.append(
-        {'module_id' : 'L1',
-        'module_type' : datatools.LessonInteraction.MODULETYPE,
-        'outcome' : None,
-        'student_id' : 'Carter',
-        'timestep' : 3})
+    def complete_lesson(student_id, lesson_id, timestep):
+        data.append(
+            {'module_id' : lesson_id,
+            'module_type' : datatools.LessonInteraction.MODULETYPE,
+            'student_id' : student_id,
+            'timestep' : timestep})
 
-    data.append(
-        {'module_id' : 'A1',
-        'module_type' : datatools.AssessmentInteraction.MODULETYPE,
-        'outcome' : True,
-        'student_id' : 'Lee',
-        'timestep' : 4})
+    complete_assessment('Lee', 'A1', True, 1)
+    complete_assessment('Carter', 'A1', False, 1)
+    complete_assessment('Lee', 'A2', False, 1)
+    complete_assessment('Carter', 'A2', False, 1)
 
-    data.append(
-        {'module_id' : 'A1',
-        'module_type' : datatools.AssessmentInteraction.MODULETYPE,
-        'outcome' : True,
-        'student_id' : 'Carter',
-        'timestep' : 4})
-    data.append(
-        {'module_id' : 'A2',
-        'module_type' : datatools.AssessmentInteraction.MODULETYPE,
-        'outcome' : True,
-        'student_id' : 'Lee',
-        'timestep' : 5})
+    complete_lesson('Lee', 'L1', 2)
+    complete_lesson('Carter', 'L1', 2)
 
-    data.append(
-        {'module_id' : 'A2',
-        'module_type' : datatools.AssessmentInteraction.MODULETYPE,
-        'outcome' : False,
-        'student_id' : 'Carter',
-        'timestep' : 5})
+    complete_assessment('Lee', 'A1', True, 2)
+    complete_assessment('Carter', 'A1', True, 2)
+    complete_assessment('Lee', 'A2', True, 2)
+    complete_assessment('Carter', 'A2', False, 2)
 
     history = datatools.InteractionHistory(pd.DataFrame(data))
-    history.squash_timesteps()
 
     return history
 
 
 def get_assessment_grid_model(
-    embedding_dimension=2,
+    embedding_kwargs=None,
     num_assessments=25,
     num_attempts=10):
     """
-    A two-dimensional grid of assessments and a single student
-    somewhere in the middle of it
+    A two-dimensional grid of assessments and a single student somewhere in the middle of it
+    
+    :param dict|None embedding_kwargs: Keyword arguments for :py:class:`models.EmbeddingModel`
+    :param int num_assessments: Number of assessments in grid (should be a perfect square)
+    :param int num_attempts: Number of attempts per assessment
+    :rtype: models.EmbeddingModel
+    :return: An embedding model with a sampled interaction history
     """
+
+    if embedding_kwargs is None:
+        embedding_kwargs = {
+            'embedding_dimension' : 2,
+            'using_lessons' : False,
+            'using_prereqs' : False,
+            'using_bias' : False,
+            'learning_update_variance_constant' : 0.5
+        }
+        embedding_dimension = 2
+    else:
+        embedding_dimension = embedding_kwargs['embedding_dimension']
 
     id_of_assessment_idx = lambda idx: 'A' + str(idx + 1)
 
@@ -190,21 +171,13 @@ def get_assessment_grid_model(
 
         return pd.DataFrame(data)
 
-    embedding_kwargs = {
-        'embedding_dimension' : embedding_dimension,
-        'using_lessons' : False,
-        'using_prereqs' : False,
-        'using_bias' : False,
-        'learning_update_variance_constant' : 0.5
-    }
-
     model = datasynth.sample_synthetic_model_and_history(
         sample_students,
         sample_assessments,
-        sample_lessons,
-        sample_prereqs,
         sample_interactions,
-        embedding_kwargs)
+        sample_lessons=sample_lessons,
+        sample_prereqs=sample_prereqs,
+        embedding_kwargs=embedding_kwargs)
 
     num_students = model.student_embeddings.shape[0]
     num_assessments = model.assessment_embeddings.shape[0]
@@ -237,6 +210,9 @@ def get_independent_assessments_history():
     (i.e. Evan has enough of skill 2 to pass A2 but not enough of
     skill 1 to pass A1, and Seth has enough of skill 1 to pass A1
     but not enough of skill 2 to pass A2).
+    
+    :rtype: datatools.InteractionHistory
+    :return: A toy interaction history
     """
 
     data = []
@@ -268,8 +244,7 @@ def get_independent_assessments_history():
 
 def get_independent_lessons_history():
     """
-    QUESTION Figure references make no sense here
-    We replicate the setting in Figure \ref{fig:superbad}, then add two
+    We replicate the setting in get_independent_assessments_history, then add two
     new students Slater and Michaels, and two new lesson modules L1
     and L2. Slater is initially identical to Evan, while Michaels is
     initially identical to Seth. Slater reads lesson L1, then passes
@@ -282,6 +257,9 @@ def get_independent_lessons_history():
     Slater was lacking in Skill 1 while Michaels was lacking in Skill 2, but after
     completing their lessons they passed their assessments, showing that they
     gained from their respective lessons what they were lacking initially.
+    
+    :rtype: datatools.InteractionHistory
+    :return: A toy interaction history
     """
 
     data = []
@@ -338,8 +316,7 @@ def get_independent_lessons_history():
 
 def get_lesson_prereqs_history():
     """
-    QUESTION \ref{fig:superbad} makes no sense here.
-    We replicate the setting in Figure \ref{fig:superbad}, then add a new
+    We replicate the setting in get_independent_assessments_history, then add a new
     assessment module A3 and a new lesson module L1. All students
     initially fail assessment A3, then read lesson L1, after which
     McLovin passes A3 while everyone else still fails A3.
@@ -347,18 +324,20 @@ def get_lesson_prereqs_history():
     The key observation here is that McLovin is the only student who initially
     satisfies the prerequisites for L1, so he is the only student who realizes
     significant gains.
+    
+    :rtype: datatools.InteractionHistory
+    :return: A toy interaction history
     """
 
     data = []
 
-    # QUESTION: Perhaps you want to name j timestep?
-    def complete_assessment(assessment_id, student_id, outcome, j):
+    def complete_assessment(assessment_id, student_id, outcome, timestep):
         data.append(
             {'module_id' : assessment_id,
             'module_type' : datatools.AssessmentInteraction.MODULETYPE,
             'outcome' : outcome,
             'student_id' : student_id,
-            'timestep' : j})
+            'timestep' : timestep})
 
     def complete_lesson(lesson_id, student_id, timestep):
         data.append(
@@ -400,3 +379,4 @@ def get_lesson_prereqs_history():
     history.squash_timesteps()
 
     return history
+

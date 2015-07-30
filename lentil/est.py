@@ -1,7 +1,7 @@
 """
 Module for estimating model parameters
+
 @author Siddharth Reddy <sgr45@cornell.edu>
-01/07/15
 """
 
 from __future__ import division
@@ -11,7 +11,6 @@ from collections import OrderedDict
 import copy
 import logging
 import math
-import sys
 import time
 
 from matplotlib import pyplot as plt
@@ -34,6 +33,7 @@ def gradient_descent(
     rate=0.005,
     ftol=1e-3,
     num_checkpoints=10,
+    max_iter=1000,
     using_adagrad=True,
     debug_mode_on=False,
     verify_gradient=False):
@@ -46,18 +46,27 @@ def gradient_descent(
         assessment interactions, and lesson interactions as input,
         and outputs values for gradients and the cost function
         evaluated with current parameter values
-        QUESTION: Can you point to an example?
-    :param dict[str, np.ndarray] params: Parameters allowed to vary
-    :param dict[str, function] param_constraint_funcs: Functions that enforce bounds on parameters
-        QUESTION: What sorts of functions should these be?
-    :param bool using_adagrad: Whether to use Adagrad
-    :param float ftol: QUESTION
-    :param float rate: QUESTION
-    :param float eta: Adagrad parameter QUESTION More descriptive?
-    :param float eps: Adagrad parameter QUESTION Ditto?
-    :param bool debug_mode_on: True => dump plots QUESTION where?
+
+        For example, see :py:func:`grad.without_scipy_*`
+
+    :param dict[str,np.ndarray] params: Parameters allowed to vary
+    :param dict[str,function] param_constraint_funcs: Functions that enforce bounds on parameters
+        An example function for enforcing nonnegativity:
+            
+            lambda x: np.maximum(0, x)
+
+    :param bool using_adagrad: Whether or not to use Adagrad
+    :param float ftol: Stopping condition
+        When relative difference between consecutive cost function evaluations
+        drops below ftol, then the iterative optimization has "converged"
+
+    :param float rate: Fixed learning rate
+    :param float eta: Adagrad base learning rate
+    :param float eps: Adagrad small epsilon
+    :param bool debug_mode_on: True => dump plots using matplotlib.pyplot.show
     :param int num_checkpoints: Number of times to print "Iteration #" during updates
-    :rtype: dict[str, np.ndarray]
+    :param int max_iter: Maximum number of training steps
+    :rtype: dict[str,np.ndarray]
     :return: Parameter values at which gradient descent "converges"
     """
     if eta <= 0:
@@ -66,18 +75,21 @@ def gradient_descent(
         raise ValueError('eps must be positive not {}'.format(eps))
     if num_checkpoints <= 1:
         raise ValueError('Must have at least two checkpoints not {}'.format(num_checkpoints))
+    if max_iter<=0:
+        raise ValueError('Maximum number of iterations is strictly positive')
 
     if using_adagrad:
         # historical gradient (for Adagrad)
         hg = {k: np.zeros_like(v) for k, v in params.iteritems()}
 
-    est_training_steps = 1000 # QUESTION: Why is this hard coded?
-    checkpoint_iter_step = max(1, est_training_steps // num_checkpoints)
+    checkpoint_iter_step = max(1, max_iter // num_checkpoints)
     is_checkpoint = lambda idx: idx % checkpoint_iter_step == 0
 
     if verify_gradient:
         # check accuracy of gradient function using finite differences
-        # QUESTION Why is this here and not in a test suite?
+        # TODO: move this check into a test suite and automate checking for correctness
+        # for now, set verify_gradient=True in a notebook (e.g., nb/synthetic_experiments.ipynb)
+        # and look at the scatterplots/histograms yourself
         g, cst = grads(params)
 
         epsilon = 1e-9 # epsilon upper bound
@@ -87,60 +99,56 @@ def gradient_descent(
                 continue
             fd = [] # gradient components computed with finite difference method
             cf = [] # gradient components computed with closed form expression
-            # QUESTION: Why all the flattens and not ravel?
-            for i, c in enumerate(v.flatten()):
+            for i, c in enumerate(v.ravel()):
                 for _ in xrange(num_samples):
                     nparams = copy.deepcopy(params)
                     delta = epsilon * c
 
-                    # QUESTION: Why do you need to flatten instead of just broadcasting?
-                    nparams[k] = nparams[k].flatten()
+                    # flattening is necessary here because we are iterating over v.ravel()
+                    nparams[k] = nparams[k].ravel()
                     nparams[k][i] += delta
                     nparams[k] = np.reshape(nparams[k], params[k].shape)
                     _, ncst = grads(nparams)
 
-                    # QUESTION: Ditto
-                    nparams[k] = nparams[k].flatten()
+                    nparams[k] = nparams[k].ravel()
                     nparams[k][i] -= 2 * delta
                     nparams[k] = np.reshape(nparams[k], params[k].shape)
                     _, pcst = grads(nparams)
 
                     fd.append((ncst - pcst) / (2 * delta))
-                cf += [c] * num_samples
+                cf.extend([c] * num_samples)
 
-            # QUESTION: Bad idea to call plt directly instead of first creating a figure
-            #           Leads to races and all that jazz
-            plt.title('Components of Cost Gradient w.r.t. %s' % k)
-            plt.xlabel('From Finite Differences')
-            plt.ylabel('From Closed Form Expression')
-            plt.scatter(fd, cf)
+            _, ax = plt.subplots()
+            ax.set_title('Components of Cost Gradient w.r.t. %s' % k)
+            ax.set_xlabel('From Finite Differences')
+            ax.set_ylabel('From Closed Form Expression')
+            ax.scatter(fd, cf)
             plt.show()
 
             try:
                 diffs = [(x-y)/x for x, y in zip(fd, cf)]
-                plt.title('Diffs of Cost Gradient w.r.t. %s' % k)
-                plt.xlabel(
+                _, ax = plt.subplots()
+                ax.set_title('Diffs of Cost Gradient w.r.t. %s' % k)
+                ax.set_xlabel(
                     '(From Finite Differences - From Closed Form Expression) \
                     / From Finite Differences')
-                plt.ylabel('Frequency (number of gradient components)')
-                plt.hist([x for x in diffs if not (np.isinf(x) or np.isnan(x))], bins=20)
+                ax.set_ylabel('Frequency (number of gradient components)')
+                ax.hist([x for x in diffs if not (np.isinf(x) or np.isnan(x))], bins=20)
                 plt.show()
             except IndexError:
                 pass
 
     costs = []
-    # What is gs?
-    gs = {k: [] for k in params}
+    gradient_norms = {k: [] for k in params}
 
     start_time = time.time()
 
-    iter_idx = 0
-    # QUESTION: It looks like you actually don't actually need sys.maxint, and this isn't
-    #           really an int at all. Maybe a comment and setting equal to 2 * ftol or something
-    rel_diff = sys.maxint
-    while True:
+    rel_diff = 2 * ftol # arbitrary starting point (should be greater than ftol)
+    for iter_idx in xrange(max_iter):
         g, cst = grads(params)
 
+        # don't use "for k, v in g.iteritems()", because we may be computing gradients
+        # for parameters that are not being used
         for k in params:
             v = g[k]
             if using_adagrad:
@@ -149,35 +157,35 @@ def gradient_descent(
             else:
                 params[k] -= rate * v
 
-            params[k] = param_constraint_funcs[k](k, params[k])
+            params[k] = param_constraint_funcs[k](params[k])
 
-        costs.append(cst)
         for k in params:
-            gs[k].append(np.linalg.norm(g[k]))
+            gradient_norms[k].append(np.linalg.norm(g[k]))
 
         if iter_idx >= 1:
-            rel_diff = (cst - costs[-2]) / costs[-2]
+            rel_diff = (cst - costs[-1]) / costs[-1]
 
         if is_checkpoint(iter_idx):
             _logger.debug('Iteration %d, rel_diff=%f', iter_idx, rel_diff)
             _logger.debug('Running at %f seconds per iteration',
                 (time.time() - start_time) / (iter_idx + 1))
 
+        costs.append(cst)
+        
         if abs(rel_diff) <= ftol:
             break
 
-        # QUESTION: It is bold not to set a max_iter
-        iter_idx += 1
-
     if debug_mode_on:
-        # Ditto the boldness of using plt directly Especially without a clear or anything
-        plt.xlabel('Iteration')
-        plt.ylabel('Cost')
-        plt.plot(costs)
+        _, ax = plt.subplots()
+        ax.set_xlabel('Iteration')
+        ax.set_ylabel('Cost')
+        ax.plot(costs)
         plt.show()
-        for k, v in gs.iteritems():
-            plt.ylabel('L2-norm-squared of g' + k)
-            plt.plot(v)
+        for k, v in gradient_norms.iteritems():
+            _, ax = plt.subplots()
+            ax.set_xlabel('Iteration')
+            ax.set_ylabel('Euclidean norm of g' + k)
+            ax.plot(v)
             plt.show()
 
     return params
@@ -203,36 +211,47 @@ class EmbeddingMAPEstimator(object):
         """
         Initialize estimator object
 
-        QUESTION: You're missing some arguments
+        :param float regularization_constant: Coefficient of L2 regularizer in cost function
+        :param float ftol: Stopping condition
+            When relative difference between consecutive cost function evaluations
+            drops below ftol, then the iterative optimization has "converged"
 
-        :param float regularization_constant: Coefficient of L2 regularizer
-            in cost function
-        :param dict[str, object] gradient_descent_kwargs:
-            Arguments for gradient_descent
-        :param dict[str, np.ndarray] initial_param_vals: For warm starts
+        :param dict[str,object] gradient_descent_kwargs: Arguments for gradient_descent
+        :param dict[str,np.ndarray] initial_param_vals: For warm starts
         :param bool using_scipy:
             True => use scipy.optimize.minimize,
             False => use batch gradient descent
+
         :param bool verify_gradient:
-            True => use scipy.optimize.check_grad to verify accuracy of analytic gradient,
+            True => use :py:func:`scipy.optimize.check_grad` to 
+            verify accuracy of analytic gradient
+
         :param bool debug_mode_on:
             True => print checkpoints and dump plots
+
+        :param pd.DataFrame filtered_history: A filtered history to be used instead of
+            the history attached to the model passed to 
+            :py:func:`est.EmbeddingMAPEstimator.fit_model`
+
+            For details see :py:func:`datatools.InteractionHistory.split_interactions_by_type`
+
+        :param datatools.SplitHistory split_history: An interaction history split into assessment
+            interactions, lesson interactions, and timestep of last interaction for each student
         """
         if regularization_constant < 0:
-            raise ValueError(('regularization_constant must be '
-                              'nonnegative not {}').format(regularization_constant))
+            raise ValueError('regularization_constant must be nonnegative not {}'.format(
+                regularization_constant))
         if ftol <= 0:
             raise ValueError('ftol must be positive not {}'.format(ftol))
 
         try:
             # if a number is passed, use same regularization constant for all embedding parameters
             # (students, assessments, lessons, prereqs, and concepts)
-            regularization_constant = float(regularization_constant)
-            regularization_constant = [regularization_constant] * 5
+            regularization_constant = [float(regularization_constant)] * 5
         except TypeError:
             if len(regularization_constant) != 5:
-                raise ValueError('regularization_constant must be '
-                    'either a number or a list of length 5')
+                raise ValueError(
+                        'regularization_constant must be either a number or a list of length 5')
 
         self.regularization_constant = regularization_constant
         self.gradient_descent_kwargs = gradient_descent_kwargs
@@ -247,10 +266,10 @@ class EmbeddingMAPEstimator(object):
 
     def fit_model(self, model):
         """
-        Use gradient descent to perform maximum a posteriori
+        Use iterative optimization to perform maximum a posteriori
         estimation of model parameters. Relies on hand-coded gradient.
 
-        :param EmbeddingModel model: A skill embedding model
+        :param models.EmbeddingModel model: A skill embedding model
             that needs to be fit to its interaction history
         """
 
@@ -272,33 +291,35 @@ class EmbeddingMAPEstimator(object):
         if model.using_graph_prior:
             param_shapes[models.CONCEPT_EMBEDDINGS] = model.concept_embeddings.shape
 
-        constraint_func = lambda name, val: np.maximum(
-            model.anti_singularity_lower_bounds[name],
-            val)
-        no_constraint_func = lambda name, val: val
+        constraint_func = lambda name: (lambda val: np.maximum(
+            model.anti_singularity_lower_bounds[name], val))
+        no_constraint_func = lambda x: x
         param_constraint_funcs = {
-            models.STUDENT_EMBEDDINGS : constraint_func,
-            models.ASSESSMENT_EMBEDDINGS : constraint_func,
-            models.LESSON_EMBEDDINGS : constraint_func,
-            models.PREREQ_EMBEDDINGS : constraint_func,
+            models.STUDENT_EMBEDDINGS : constraint_func(models.STUDENT_EMBEDDINGS),
+            models.ASSESSMENT_EMBEDDINGS : constraint_func(models.ASSESSMENT_EMBEDDINGS),
+            models.LESSON_EMBEDDINGS : constraint_func(models.LESSON_EMBEDDINGS),
+            models.PREREQ_EMBEDDINGS : constraint_func(models.PREREQ_EMBEDDINGS),
             models.STUDENT_BIASES : no_constraint_func,
             models.ASSESSMENT_BIASES : no_constraint_func,
-            models.CONCEPT_EMBEDDINGS : constraint_func,
+            models.CONCEPT_EMBEDDINGS : constraint_func(models.CONCEPT_EMBEDDINGS),
         }
 
         params = OrderedDict()
         for key, value in param_shapes.iteritems():
             if key in self.initial_param_vals:
-                params[key] = param_constraint_funcs[key](key, self.initial_param_vals[key])
+                params[key] = param_constraint_funcs[key](self.initial_param_vals[key])
             else:
-                params[key] = param_constraint_funcs[key](key, np.random.random(value))
+                params[key] = param_constraint_funcs[key](np.random.random(value))
 
         if self.split_history is None:
-            (assessment_interactions, lesson_interactions, timestep_of_last_interaction) = \
-                model.history.split_interactions_by_type(filtered_history=self.filtered_history)
+            split_history = model.history.split_interactions_by_type(
+                    filtered_history=self.filtered_history,
+                    insert_dummy_lesson_ixns=True)
         else:
-            (assessment_interactions, lesson_interactions, timestep_of_last_interaction) = \
-                self.split_history
+            split_history = self.split_history
+        assessment_interactions = split_history.assessment_interactions
+        lesson_interactions = split_history.lesson_interactions
+        timestep_of_last_interaction = split_history.timestep_of_last_interaction
 
         if len(assessment_interactions) == 0:
             raise ValueError('No assessment interactions in history!')
@@ -308,27 +329,28 @@ class EmbeddingMAPEstimator(object):
             using_lessons=model.using_lessons,
             using_prereqs=model.using_prereqs)
 
-        # QUESTION: Be warned that .size returns the number of nonzero entries in sparse matrices
-        param_sizes = {k: v.size for k, v in params.iteritems()}
+        #param_sizes = {k: v.size for k, v in params.iteritems()}
+        param_sizes = {k: np.prod(v.shape) for k, v in params.iteritems()}
         param_vals = np.concatenate([v.ravel() for v in params.itervalues()], axis=0)
 
         (
             student_idxes_for_assessment_ixns,
             assessment_idxes_for_assessment_ixns, _) = assessment_interactions
-        if model.using_lessons:
-            (
-                student_idxes_for_lesson_ixns,
-                lesson_idxes_for_lesson_ixns,
-                times_since_prev_ixn_for_lesson_ixns) = lesson_interactions
-            num_lesson_ixns = len(student_idxes_for_lesson_ixns)
-            lesson_ixns_participation_matrix_entries = np.ones(num_lesson_ixns)
-        else:
-            times_since_prev_ixn_for_lesson_ixns = None
-
+            
+        (
+            student_idxes_for_lesson_ixns,
+            lesson_idxes_for_lesson_ixns,
+            times_since_prev_ixn_for_lesson_ixns) = lesson_interactions
+        num_lesson_ixns = len(student_idxes_for_lesson_ixns)
+        lesson_ixns_participation_matrix_entries = np.ones(num_lesson_ixns)
+        
         num_assessment_ixns = len(student_idxes_for_assessment_ixns)
         assessment_ixns_participation_matrix_entries = np.ones(num_assessment_ixns)
         assessment_ixn_idxes = np.arange(num_assessment_ixns)
-        num_students = param_shapes[models.STUDENT_EMBEDDINGS][0]
+
+        # num_students * num_timesteps
+        num_students_by_timesteps = param_shapes[models.STUDENT_EMBEDDINGS][0]
+        
         num_assessments = param_shapes[models.ASSESSMENT_EMBEDDINGS][0]
         assessment_participation_in_assessment_ixns = sparse.coo_matrix(
             (assessment_ixns_participation_matrix_entries,
@@ -337,16 +359,14 @@ class EmbeddingMAPEstimator(object):
         student_participation_in_assessment_ixns = sparse.coo_matrix(
             (assessment_ixns_participation_matrix_entries,
                 (student_idxes_for_assessment_ixns, assessment_ixn_idxes)),
-            shape=(num_students, num_assessment_ixns)).tocsr()
+            shape=(num_students_by_timesteps, num_assessment_ixns)).tocsr()
 
         num_timesteps = model.history.duration()
-        # QUESTION: Why will this matrix have the specified shape? sifai // num_timesteps
-        # still has size num_students, no?
         student_bias_participation_in_assessment_ixns = sparse.coo_matrix(
             (assessment_ixns_participation_matrix_entries,
                 (student_idxes_for_assessment_ixns // num_timesteps,
                     assessment_ixn_idxes)),
-            shape=(num_students // num_timesteps, num_assessment_ixns)).tocsr()
+            shape=(num_students_by_timesteps // num_timesteps, num_assessment_ixns)).tocsr()
 
         if not model.using_graph_prior:
             assessment_participation_in_concepts = None
@@ -365,25 +385,26 @@ class EmbeddingMAPEstimator(object):
                 shape=(num_assessments, num_concepts)).tocsr()
             concept_participation_in_assessments = assessment_participation_in_concepts.T
 
+        # outside the "if model.using_lessons" statement
+        # because we may need these for dummy lesson interactions in grad.*_without_lessons
+        lesson_ixn_idxes = np.arange(num_lesson_ixns)
+        curr_student_participation_in_lesson_ixns = sparse.coo_matrix(
+            (lesson_ixns_participation_matrix_entries,
+                (student_idxes_for_lesson_ixns, lesson_ixn_idxes)),
+            shape=(num_students_by_timesteps, num_lesson_ixns)).tocsr()
+        prev_student_participation_in_lesson_ixns = sparse.coo_matrix(
+            (lesson_ixns_participation_matrix_entries,
+                (student_idxes_for_lesson_ixns - 1, lesson_ixn_idxes)),
+            shape=(num_students_by_timesteps, num_lesson_ixns)).tocsr()
+
+        if not model.using_prereqs:
+            # when computing gradients, we will be computing Ax - Bx
+            # where A = curr_student_participation_in_lesson_ixns
+            # and B = prev_student_participation_in_lesson_ixns,
+            # so to speed things up we precompute A-B and compute (A-B)x
+            curr_student_participation_in_lesson_ixns -= prev_student_participation_in_lesson_ixns
+
         if model.using_lessons:
-            lesson_ixn_idxes = np.arange(num_lesson_ixns)
-            curr_student_participation_in_lesson_ixns = sparse.coo_matrix(
-                (lesson_ixns_participation_matrix_entries,
-                    (student_idxes_for_lesson_ixns, lesson_ixn_idxes)),
-                shape=(num_students, num_lesson_ixns)).tocsr()
-            prev_student_participation_in_lesson_ixns = sparse.coo_matrix(
-                (lesson_ixns_participation_matrix_entries,
-                    (student_idxes_for_lesson_ixns - 1, lesson_ixn_idxes)),
-                shape=(num_students, num_lesson_ixns)).tocsr()
-
-            if not model.using_prereqs:
-                # when computing gradients, we will be computing Ax - Bx
-                # where A = curr_student_participation_in_lesson_ixns
-                # and B = prev_student_participation_in_lesson_ixns,
-                # so to speed things up we precompute A-B and compute (A-B)x
-                curr_student_participation_in_lesson_ixns -= (
-                    prev_student_participation_in_lesson_ixns)
-
             num_lessons = param_shapes[models.LESSON_EMBEDDINGS][0]
             lesson_participation_in_lesson_ixns = sparse.coo_matrix(
                 (lesson_ixns_participation_matrix_entries,
@@ -398,12 +419,10 @@ class EmbeddingMAPEstimator(object):
                     num_concepts,
                     num_concepts_per_lesson) = model.concept_lesson_edges_in_graph()
                 lesson_participation_in_concepts = sparse.coo_matrix(
-                    (1/num_concepts_per_lesson, (lesson_idxes, concept_idxes)),
+                    (1 / num_concepts_per_lesson, (lesson_idxes, concept_idxes)),
                     shape=(num_lessons, num_concepts))
                 concept_participation_in_lessons = lesson_participation_in_concepts.T
         else:
-            curr_student_participation_in_lesson_ixns = None
-            prev_student_participation_in_lesson_ixns = None
             lesson_participation_in_lesson_ixns = None
             lesson_participation_in_concepts = None
             concept_participation_in_lessons = None
@@ -435,36 +454,18 @@ class EmbeddingMAPEstimator(object):
             param_sizes[models.PREREQ_EMBEDDINGS]) if model.using_prereqs else None
         if model.using_lessons:
             if model.using_prereqs:
-                last_student_bias_idx = last_lesson_embedding_idx
+                last_student_bias_idx = last_prereq_embedding_idx
             else:
                 last_student_bias_idx = last_lesson_embedding_idx
             last_student_bias_idx += param_sizes[models.STUDENT_BIASES]
         else:
             last_student_bias_idx = last_assessment_embedding_idx + \
-                param_sizes[models.STUDENT_BIASES]
+                    param_sizes[models.STUDENT_BIASES]
 
         last_assessment_bias_idx = last_student_bias_idx + param_sizes[models.ASSESSMENT_BIASES]
-        (
-            regularization_constant_for_student_embeddings,
-            regularization_constant_for_assessment_embeddings,
-            regularization_constant_for_lesson_embeddings,
-            regularization_constant_for_prereq_embeddings,
-            regularization_constant_for_concept_embeddings) = self.regularization_constant
 
-        regularization_constants = np.zeros(len(param_vals))
-        regularization_constants[:last_student_embedding_idx] = regularization_constant_for_student_embeddings
-        regularization_constants[last_student_embedding_idx:last_assessment_embedding_idx] = regularization_constant_for_assessment_embeddings
-        if model.using_lessons:
-            regularization_constants[last_assessment_embedding_idx:last_lesson_embedding_idx] = regularization_constant_for_lesson_embeddings
-            if model.using_prereqs:
-                regularization_constants[last_lesson_embedding_idx:last_prereq_embedding_idx] = regularization_constant_for_prereq_embeddings
-        if model.using_graph_prior:
-            regularization_constants[last_assessment_bias_idx:] = regularization_constant_for_concept_embeddings
-
-        # QUESTION: All of the above code seems to indicate that to use_prereqs you have to
-        # use_lessons. Is that documneted anywhere?
-
-        # QUESTION: What are the two box constraints?
+        # dict[str,tuple(float|None,float|None)]
+        # parameter name -> (lower bound, upper bound)
         box_constraints_of_parameters = {
             models.STUDENT_EMBEDDINGS : (
                 model.anti_singularity_lower_bounds[models.STUDENT_EMBEDDINGS],
@@ -489,9 +490,9 @@ class EmbeddingMAPEstimator(object):
 
         gradient_holder = np.zeros(param_vals.shape)
 
-        # QUESTION: So, as a matter of style, passing this many arguments in an untyped
-        # language is extremely dangerous and unmaintainable. Consider passing them as
-        # kwargs.
+        # TODO: pass these as kwargs
+        # right now, we have to be very careful about the order of these arguments
+        # and how they are received by functions in the grad module
         grad_args = [
             assessment_interactions,
             lesson_interactions,
@@ -511,7 +512,6 @@ class EmbeddingMAPEstimator(object):
             concept_participation_in_lessons,
             prereq_edge_concept_idxes,
             concept_participation_in_prereq_edges,
-            regularization_constants,
             last_student_embedding_idx,
             last_assessment_embedding_idx,
             last_lesson_embedding_idx,
@@ -521,6 +521,7 @@ class EmbeddingMAPEstimator(object):
             model.history.duration(),
             model.using_bias,
             model.using_graph_prior,
+            model.using_l1_regularizer,
             gradient_holder]
 
         if not self.using_scipy:
@@ -534,11 +535,8 @@ class EmbeddingMAPEstimator(object):
                 **self.gradient_descent_kwargs)
 
             # we originally passed in student embeddings
-            # with shape (num_students, num_timesteps, embedding_dimension),
-            # so let's switch back to (num_students,
-            # embedding_dimension, num_timesteps)
-
-            # QUESTION: Why is this inconsistent? Document where this went wrong
+            # with shape (num_students * num_timesteps, embedding_dimension),
+            # so let's switch back to (num_students, embedding_dimension, num_timesteps)
             params[models.STUDENT_EMBEDDINGS] = np.reshape(
                 params[models.STUDENT_EMBEDDINGS],
                 (model.student_embeddings.shape[0],
@@ -568,10 +566,11 @@ class EmbeddingMAPEstimator(object):
                     'ftol' : self.ftol
                     })
 
-            # reshape parameter estimates from flattened array
-            # into tensors and matrices
+            # reshape parameter estimates from flattened array into tensors and matrices
 
-            # QUESTION: Ditto above question
+            # we originally passed in student embeddings
+            # with shape (num_students * num_timesteps, embedding_dimension),
+            # so let's switch back to (num_students, embedding_dimension, num_timesteps)
             params[models.STUDENT_EMBEDDINGS] = np.reshape(
                 map_estimates.x[:last_student_embedding_idx],
                 (model.student_embeddings.shape[0],
@@ -579,23 +578,20 @@ class EmbeddingMAPEstimator(object):
                     model.student_embeddings.shape[1])).swapaxes(1, 2)
 
             params[models.ASSESSMENT_EMBEDDINGS] = np.reshape(
-                map_estimates.x[last_student_embedding_idx:(
-                    last_assessment_embedding_idx)],
+                map_estimates.x[last_student_embedding_idx:last_assessment_embedding_idx],
                 param_shapes[models.ASSESSMENT_EMBEDDINGS])
 
             begin_idx = last_assessment_embedding_idx
             if model.using_lessons:
                 begin_idx = last_lesson_embedding_idx
                 params[models.LESSON_EMBEDDINGS] = np.reshape(
-                    map_estimates.x[last_assessment_embedding_idx:(
-                        last_lesson_embedding_idx)],
+                    map_estimates.x[last_assessment_embedding_idx:last_lesson_embedding_idx],
                     param_shapes[models.LESSON_EMBEDDINGS])
 
             if model.using_prereqs:
                 begin_idx = last_prereq_embedding_idx
                 params[models.PREREQ_EMBEDDINGS] = np.reshape(
-                    map_estimates.x[last_lesson_embedding_idx:(
-                        last_prereq_embedding_idx)],
+                    map_estimates.x[last_lesson_embedding_idx:last_prereq_embedding_idx],
                     param_shapes[models.PREREQ_EMBEDDINGS])
 
             if model.using_bias:
@@ -611,14 +607,12 @@ class EmbeddingMAPEstimator(object):
                     map_estimates.x[last_assessment_bias_idx:],
                     param_shapes[models.CONCEPT_EMBEDDINGS])
 
-        # manually pin student state
-        # after last interaction
-        # (lack of interactions =>
-        # no drift likelihoods in objective function to pin students)
+        # manually pin student state after last interaction 
+        # lack of interactions => no drift likelihoods in objective function to pin students
         for student_id, t in timestep_of_last_interaction.iteritems():
             student_idx = model.history.idx_of_student_id(student_id)
-            params[models.STUDENT_EMBEDDINGS][student_idx, :, (
-                t-1):] = params[models.STUDENT_EMBEDDINGS][student_idx, :, t-1][:, None]
+            params[models.STUDENT_EMBEDDINGS][student_idx, :, t:] = \
+                    params[models.STUDENT_EMBEDDINGS][student_idx, :, t][:, None]
 
         model.student_embeddings = params[models.STUDENT_EMBEDDINGS]
         model.assessment_embeddings = params[models.ASSESSMENT_EMBEDDINGS]
@@ -631,3 +625,61 @@ class EmbeddingMAPEstimator(object):
             model.assessment_biases = params[models.ASSESSMENT_BIASES]
         if model.using_graph_prior:
             model.concept_embeddings = params[models.CONCEPT_EMBEDDINGS]
+
+
+class MIRTMAPEstimator(object):
+    """
+    Class for estimating parameters of mult-dimensional item response theory model
+    """
+
+    def __init__(
+        self,
+        regularization_constant=1e-3,
+        ftol=1e-3,
+        verify_gradient=False,
+        filtered_history=None,
+        split_history=None):
+        """
+        Initialize estimator object
+
+        :param float regularization_constant: Coefficient of L2 regularizer in cost function
+        :param float ftol: Stopping condition
+            When relative difference between consecutive cost function evaluations
+            drops below ftol, then the iterative optimization has "converged"
+
+        :param bool verify_gradient: 
+            True => use :py:func:`scipy.optimize.check_grad` to verify
+            accuracy of analytic gradient
+
+        :param pd.DataFrame|None filtered_history: A filtered history to be used instead of
+            the history attached to the model passed to :py:func:`est.MIRTMAPEstimator.fit_model`
+
+            For details see :py:func:`datatools.InteractionHistory.split_interactions_by_type`
+
+        :param datatools.SplitHistory|None split_history: An interaction history split into
+            assessment interactions, lesson interactions, and timestep of last interaction
+            for each student
+        """
+        if regularization_constant < 0:
+            raise ValueError('regularization_constant must be nonnegative not {}'.format(
+                regularization_constant))
+   
+        if ftol <= 0:
+            raise ValueError('ftol must be positive not {}'.format(ftol))
+
+        self.regularization_constant = regularization_constant
+        self.ftol = ftol
+        self.filtered_history = filtered_history
+        self.split_history = split_history
+        self.verify_gradient = verify_gradient
+
+    def fit_model(self, model):
+        """
+        Use iterative optimization to perform maximum a posteriori
+        estimation of model parameters. Relies on hand-coded gradient.
+
+        :param models.MIRTModel model: A mult-dimensional IRT model that needs to be fit
+            to its interaction history
+        """
+        raise NotImplementedError
+

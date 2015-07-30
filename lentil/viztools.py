@@ -1,11 +1,8 @@
 """
 Module for visualizing skill embeddings
-@author Siddharth Reddy <sgr45@cornell.edu>
-01/08/15
-"""
 
-# QUESTION My one comment on this file is that it is generally better not to call plt
-# directly for plotting in non-interactive mode
+@author Siddharth Reddy <sgr45@cornell.edu>
+"""
 
 import logging
 
@@ -13,7 +10,7 @@ import matplotlib
 from matplotlib import pyplot as plt
 import numpy as np
 
-from lentil import models
+from . import models
 
 
 _logger = logging.getLogger(__name__)
@@ -49,7 +46,7 @@ def plot_embedding(
     Students, assessments, prereqs = points
     Lessons = vectors
 
-    See Synthetic\ Experiments.ipynb for example invocations
+    See nb/synthetic_experiments.ipynb for example invocations
 
     :param EmbeddingModel model: A skill embedding model
     :param int timestep: A timestep. By default, timestep=-1 => latest snapshot
@@ -113,10 +110,12 @@ def plot_embedding(
     if show_pass_rates and model.history.num_students() > 1:
         _logger.warning('Showing pass rates for more than one student!')
 
+    _, ax = plt.subplots()
+
     if show_students:
         student_embeddings_x = model.student_embeddings[:, 0, timestep]
         student_embeddings_y = model.student_embeddings[:, 1, timestep]
-        plt.scatter(
+        ax.scatter(
             student_embeddings_x, student_embeddings_y,
             alpha=alpha, marker='o', s=size, label='student')
 
@@ -127,7 +126,7 @@ def plot_embedding(
                 student_y = student_embeddings_y[student_idx]
                 student_id_x = student_x + id_padding_x
                 student_id_y = student_y + id_padding_y
-                plt.annotate(student_id, xy=(
+                ax.annotate(student_id, xy=(
                     student_x, student_y), xytext=(
                     student_id_x, student_id_y))
 
@@ -140,7 +139,7 @@ def plot_embedding(
                 model.history.id_of_assessment_idx(
                     i), timestep if timestep!=-1 else None) for i in xrange(
                 num_assessments)]
-            plt.scatter(
+            ax.scatter(
                 assessment_embeddings_x,
                 assessment_embeddings_y,
                 c=pass_rates,
@@ -150,7 +149,7 @@ def plot_embedding(
                 label='assessment',
                 cmap=matplotlib.cm.cool)
         else:
-            plt.scatter(
+            ax.scatter(
                 assessment_embeddings_x,
                 assessment_embeddings_y,
                 alpha=alpha,
@@ -165,14 +164,14 @@ def plot_embedding(
                 assessment_y = assessment_embeddings_y[assessment_idx]
                 assessment_id_x = assessment_x + id_padding_x
                 assessment_id_y = assessment_y + id_padding_y
-                plt.annotate(assessment_id, xy=(
+                ax.annotate(assessment_id, xy=(
                     assessment_x, assessment_y), xytext=(
                     assessment_id_x, assessment_id_y))
 
     if show_concepts:
         concept_embeddings_x = model.concept_embeddings[:, 0]
         concept_embeddings_y = model.concept_embeddings[:, 1]
-        plt.scatter(
+        ax.scatter(
             concept_embeddings_x,
             concept_embeddings_y,
             alpha=alpha,
@@ -186,7 +185,7 @@ def plot_embedding(
                 concept_y = concept_embeddings_y[concept_idx]
                 concept_id_x = concept_x + id_padding_x
                 concept_id_y = concept_y + id_padding_y
-                plt.annotate(concept_id, xy=(
+                ax.annotate(concept_id, xy=(
                     concept_x, concept_y), xytext=(
                     concept_id_x, concept_id_y))
 
@@ -199,7 +198,7 @@ def plot_embedding(
                 model.history.num_lessons())
         lesson_embeddings_x = model.lesson_embeddings[:, 0]
         lesson_embeddings_y = model.lesson_embeddings[:, 1]
-        plt.quiver(
+        ax.quiver(
             prereq_embeddings_x, prereq_embeddings_y,
             lesson_embeddings_x, lesson_embeddings_y, pivot='tail')
 
@@ -210,12 +209,12 @@ def plot_embedding(
                 lesson_y = prereq_embeddings_y[lesson_idx] if model.using_prereqs else 0
                 lesson_id_x = lesson_x + id_padding_x
                 lesson_id_y = lesson_y + id_padding_y
-                plt.annotate(lesson_id, xy=(
+                ax.annotate(lesson_id, xy=(
                     lesson_x, lesson_y), xytext=(
                     lesson_id_x, lesson_id_y))
 
     if show_legend:
-        plt.legend(loc='upper left')
+        ax.legend(loc='upper left')
 
     if force_invariant_axis_limits:
         x = []
@@ -234,19 +233,20 @@ def plot_embedding(
         if show_concepts:
             x += np.unique(model.concept_embeddings[:, 0]).tolist()
             y += np.unique(model.concept_embeddings[:, 1]).tolist()
-        plt.xlim([min(x)-axis_limit_padding, max(x)+axis_limit_padding])
-        plt.ylim([min(y)-axis_limit_padding, max(y)+axis_limit_padding])
+        ax.set_xlim([min(x)-axis_limit_padding, max(x)+axis_limit_padding])
+        ax.set_ylim([min(y)-axis_limit_padding, max(y)+axis_limit_padding])
 
     if x_axis_limits is not None:
-        plt.xlim(x_axis_limits)
+        ax.set_xlim(x_axis_limits)
     if y_axis_limits is not None:
-        plt.ylim(y_axis_limits)
+        ax.set_ylim(y_axis_limits)
 
     if title is None:
         title = 'Latent Skill Space'
-    plt.suptitle(title)
+    ax.set_title(title)
 
-    plt.xlabel('Skill 1')
-    plt.ylabel('Skill 2')
+    ax.set_xlabel('Skill 1')
+    ax.set_ylabel('Skill 2')
 
     plt.show()
+

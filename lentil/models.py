@@ -1,7 +1,7 @@
 """
 Module for skill models
+
 @author Siddharth Reddy <sgr45@cornell.edu>
-01/07/15
 """
 
 from __future__ import division
@@ -15,23 +15,29 @@ from scipy import sparse
 from sklearn import cross_validation
 from sklearn.linear_model import LogisticRegression
 
-from lentil import datatools
-from lentil import forget
-from lentil import cgraph
+from . import datatools
+from . import forget
+from . import cgraph
 
 
 _logger = logging.getLogger(__name__)
 
+# names of parameters for EmbeddingModel
 STUDENT_EMBEDDINGS = 'student_embeddings'
 ASSESSMENT_EMBEDDINGS = 'assessment_embeddings'
 LESSON_EMBEDDINGS = 'lesson_embeddings'
 PREREQ_EMBEDDINGS = 'prereq_embeddings'
 CONCEPT_EMBEDDINGS = 'concept_embeddings'
-
 STUDENT_BIASES = 'student_biases'
 ASSESSMENT_BIASES = 'assessment_biases'
 
-ANTI_SINGULARITY_LOWER_BOUND = 0.1
+# see docstring for EmbeddingModel.__init__ 
+ANTI_SINGULARITY_LOWER_BOUND = 0.001
+
+# names of parameters for MIRTModel
+STUDENT_FACTORS = 'student_factors'
+ASSESSMENT_FACTORS = 'assessment_factors'
+ASSESSMENT_OFFSETS = 'assessment_offsets'
 
 
 class SkillModel(object):
@@ -53,7 +59,7 @@ class SkillModel(object):
         """
         Compute log-likelihood of assessment outcome
 
-        :param dict[str, object] interaction: An interaction
+        :param dict[str,object] interaction: An interaction
         :param bool|None outcome: An assessment result
         :rtype: float
         :return: Log-likelihood of outcome, given student and content parameters
@@ -66,15 +72,12 @@ class SkillModel(object):
         """
         Compute the likelihood of passing an assessment interaction
 
-        :param dict[str, object] interaction: An interaction
+        :param dict[str,object] interaction: An interaction
         :rtype: float
         :return: Likelihood of a passing outcome, given student and content parameters
         """
 
-        return math.exp(
-            self.assessment_outcome_log_likelihood(
-                interaction,
-                outcome=True))
+        return math.exp(self.assessment_outcome_log_likelihood(interaction, outcome=True))
 
     def assessment_pass_likelihoods(
         self,
@@ -82,12 +85,11 @@ class SkillModel(object):
         """
         Computes the likelihoods of passing a list of assessment interactions
 
-        :param pd.DataFrame interactions:
-            A dataframe containing rows of interactions
-        :rtype: list[float]
+        :param pd.DataFrame interactions: A dataframe containing rows of interactions
+        :rtype: np.array
         :return: Likelihoods of passing outcomes, given student and content parameters
         """
-        return list(interactions.apply(self.assessment_pass_likelihood, axis=1))
+        return np.array(interactions.apply(self.assessment_pass_likelihood, axis=1))
 
 
 class EmbeddingModel(SkillModel):
@@ -107,6 +109,7 @@ class EmbeddingModel(SkillModel):
         using_bias=True,
         using_graph_prior=False,
         graph_regularization_constant=0.1,
+        using_l1_regularizer=False,
         tv_luv_model=None,
         forgetting_model=None,
         learning_update_variance_constant=0.5,
@@ -115,52 +118,53 @@ class EmbeddingModel(SkillModel):
         """
         Initialize skill model object
 
-        QUESTION: You're missing a couple parameters
-
-        :param datatools.InteractionHistory|None history:
-            An interaction history
-        :param int embedding_dimension:
-            The number of dimensions in the latent skill space
-        :param cgraph.ConceptGraph graph:
+        :param datatools.InteractionHistory|None history: An interaction history
+        :param int embedding_dimension: The number of dimensions in the latent skill space
+        :param cgraph.ConceptGraph|None graph: 
             A content-to-concept map and dependency graph for concepts
-        :param bool using_lessons:
-            Include lessons in the embedding
-        :param bool using_prereqs:
-            Include lesson prerequisites in the embedding
-        :param bool using_bias:
-            Include bias terms in the assessment result likelihood
-        :param float learning_update_variance_constant:
-            Variance of the Gaussian learning update
-        :param forget.ForgettingModel|None forgetting_model:
-            A model of the forgetting effect
+
+        :param bool using_lessons: Include lessons in the embedding
+        :param bool using_prereqs: Include lesson prerequisites in the embedding
+            This should only be True if using_lessons is True
+
+        :param bool using_bias: Include bias terms in the assessment result likelihood
+        :param bool using_graph_prior: Use concept graph to regularize module embeddings
+        :param float graph_regularization_constant: Coefficient of graph regularization term
+        :param bool using_l1_regularizer:
+            True => use L1 regularization on lesson and assessment embeddings
+            False => use L2 regularization on lesson and assessment embeddings
+
+        :param forget.ForgettingModel|None forgetting_model: A model of the forgetting effect
             None => use forgetting_penalty_term_constant
+        
         :param forget.TimeVaryingLUVModel|None tv_luv_model:
             A model of time-varying learning update variance
-            None=> use learning_update_variance_constant
+            None => use learning_update_variance_constant
+        
+        :param float learning_update_variance_constant: Variance of the Gaussian learning update
+        :param float forgetting_penalty_term_constant:
+            Penalty term in mean of Gaussian learning update
+        
         :param float anti_singularity_lower_bound:
-            Embedding parameters live in \mathbb{R}^d_+, but allowing
-            assessments and lesson prerequisites to get close to zero
-            can lead to a singularity in the embedding distance
-            (the norms of the assessment and prereq embeddings are
-            in denominators). To avoid this, we constrain assessments
-            and prereqs to be > than a strictly positive lower bound
-            (while other embedding parameters are constrained to be
-            non-negative)
+            Embedding parameters live in \mathbb{R}^d_+, but allowing assessments and lesson 
+            prerequisites to get close to zero can lead to a singularity in the embedding distance
+            (the norms of the assessment and prereq embeddings are in denominators). To avoid this,
+            we constrain assessments and prereqs to be > than a strictly positive lower bound
+            (while other embedding parameters are constrained to be non-negative)
         """
-        # QUESTION More informative messages: don't use "Invalid"; use Invalid because"
         if embedding_dimension<=0:
-            raise ValueError('Invalid embedding dimension!')
+            raise ValueError('Embedding dimension is strictly positive!')
         if learning_update_variance_constant<=0:
-            raise ValueError('Invalid baseline student variance!')
+            raise ValueError('Learning update variance is strictly positive!')
         if anti_singularity_lower_bound<=0:
-            raise ValueError('Invalid lower bound on assessment and prereq embeddings!')
+            raise ValueError('Lower bound on assessment/prereq embeddings is strictly positive!')
         if using_graph_prior and graph is None:
             raise ValueError('Must supply graph if using_graph_prior=True!')
         if using_prereqs and not using_lessons:
             raise ValueError('Cannot model lesson prerequisites without lesson embeddings!')
 
         if using_graph_prior:
-            _logger.warning('The correctness of gradients for the graph prior have not been verified!')
+            _logger.warning('Correctness of gradients for the graph prior not verified!')
 
         self.history = history
         self.embedding_dimension = embedding_dimension
@@ -177,6 +181,7 @@ class EmbeddingModel(SkillModel):
         self.using_lessons = using_lessons
         self.using_bias = using_bias
         self.using_graph_prior = using_graph_prior
+        self.using_l1_regularizer = using_l1_regularizer
 
         self.forgetting_model = forgetting_model
         self.forgetting_penalty_term_constant = forgetting_penalty_term_constant
@@ -219,31 +224,24 @@ class EmbeddingModel(SkillModel):
         if self.history is not None:
             num_students = self.history.num_students()
             self.student_embeddings = np.zeros(
-                (num_students,
-                    self.embedding_dimension,
-                    self.history.duration()))
+                    (num_students, self.embedding_dimension, self.history.duration()))
 
             num_assessments = self.history.num_assessments()
-            self.assessment_embeddings = np.zeros(
-                (num_assessments,
-                    self.embedding_dimension))
+            self.assessment_embeddings = np.zeros((num_assessments, self.embedding_dimension))
 
             self.student_biases = np.zeros(num_students)
             self.assessment_biases = np.zeros(num_assessments)
 
             num_lessons = self.history.num_lessons()
             if self.using_lessons:
-                self.lesson_embeddings = np.zeros(
-                    (num_lessons, self.embedding_dimension))
+                self.lesson_embeddings = np.zeros((num_lessons, self.embedding_dimension))
 
             if self.using_prereqs:
-                self.prereq_embeddings = np.zeros(
-                    (num_lessons, self.embedding_dimension))
+                self.prereq_embeddings = np.zeros((num_lessons, self.embedding_dimension))
 
             if self.using_graph_prior:
                 num_concepts = len(self.graph.idx_of_concept_id)
-                self.concept_embeddings = np.zeros(
-                    (num_concepts, self.embedding_dimension))
+                self.concept_embeddings = np.zeros((num_concepts, self.embedding_dimension))
 
     def learning_update_variance(self, times_since_prev_ixn_for_lesson_ixns):
         """
@@ -251,6 +249,7 @@ class EmbeddingModel(SkillModel):
 
         :param np.array times_since_prev_ixn_for_lesson_ixns:
             Time since previous interaction, for each lesson interaction
+        
         :rtype: np.ndarray
         :return: A column vector of variances, one for each lesson interaction
         """
@@ -266,6 +265,7 @@ class EmbeddingModel(SkillModel):
 
         :param np.array times_since_prev_ixn_for_lesson_ixns:
             Time since previous interaction (for each lesson interaction)
+        
         :rtype: np.ndarray
         :return:
             A two-dimensional array with shape
@@ -275,18 +275,16 @@ class EmbeddingModel(SkillModel):
         if self.forgetting_model is None:
             return self.forgetting_penalty_term_constant
 
-        return self.forgetting_model.penalty_terms(
-            times_since_prev_ixn_for_lesson_ixns)[:, None]
+        return self.forgetting_model.penalty_terms(times_since_prev_ixn_for_lesson_ixns)[:, None]
 
     def concept_assessment_edges_in_graph(self):
         """
         Get a list of concept-assessment edges in the graph
 
-        :rtype: (np.array, np.array, int, int, np.array)
+        :rtype: (np.array,np.array,int,int,np.array)
         :return: A tuple of (assessment indexes, concept indexes,
             number of unique assessments, number of unique concepts,
-            number of concepts for each assessment in the
-            first array of this tuple)
+            number of concepts for each assessment in the first array of this tuple)
         """
 
         return self.graph.concept_module_edges(
@@ -297,11 +295,10 @@ class EmbeddingModel(SkillModel):
         """
         Get a list of concept-lesson edges in the graph
 
-        :rtype: (np.array, np.array, int, int, np.array)
+        :rtype: (np.array,np.array,int,int,np.array)
         :return: A tuple of (lesson indexes, concept indexes,
             number of unique lessons, number of unique concepts,
-            number of concepts for each lesson in the
-            first array of this tuple)
+            number of concepts for each lesson in the first array of this tuple)
         """
 
         return self.graph.concept_module_edges(
@@ -345,24 +342,23 @@ class EmbeddingModel(SkillModel):
         interaction,
         outcome=None):
         """
-        Compute log-likelihood of assessment interaction given the embedding
+        Compute log-likelihood of assessment interaction, given the embedding
 
-        :param dict[str, object] interaction: An interaction
+        :param dict[str,object] interaction: An interaction
         :param bool|None outcome:
             If outcome is a bool, it overrides interaction['outcome'].
-            This is useful for SkillModel.assessment_pass_likelihood
-
+            This is useful for :py:func:`models.SkillModel.assessment_pass_likelihood`
+        
         :rtype: float|np.nan
-        :return: Log-likelihood of outcome, given the embedding.
-        If computing the log-likelihood results in a numerical error
-        (e.g., overflow or underflow), then np.nan is returned.
+        :return: Log-likelihood of outcome, given the embedding
+            If computing the log-likelihood results in a numerical error
+            (e.g., overflow or underflow), then np.nan is returned
         """
         try:
             student_id = interaction['student_id']
             timestep = interaction['timestep']
             assessment_id = interaction['module_id']
-            outcome = 1 if (
-                interaction['outcome'] if outcome is None else outcome) else -1
+            outcome = 1 if (interaction['outcome'] if outcome is None else outcome) else -1
         except KeyError:
             raise ValueError('Interaction is missing fields!')
 
@@ -385,8 +381,7 @@ class EmbeddingModel(SkillModel):
         outcome):
 
         delta = self.embedding_distance(
-            student_during,
-            requirements_of_assessment) + student_bias + assessment_bias
+                student_during, requirements_of_assessment) + student_bias + assessment_bias
 
         try:
             return -math.log(1 + math.exp(-outcome * delta))
@@ -398,14 +393,42 @@ class EmbeddingModel(SkillModel):
         prev_student_embedding,
         prereq_embedding):
 
-        return 1 / (1 + math.exp(-self.embedding_distance(
-            prev_student_embedding, prereq_embedding)))
+        return 1 / (1 + math.exp(
+            -self.embedding_distance(prev_student_embedding, prereq_embedding)))
+
+    def assessment_pass_likelihoods(self, df):
+        """
+        Compute pass likelihoods of a set of assessments, given trained model parameters
+
+        :param pd.DataFrame df: A set of assessment interactions
+        :rtype: np.array
+        :return: A list of pass likelihoods
+        """
+
+        student_idxes = df['student_id'].apply(self.history.idx_of_student_id)
+        assessment_idxes = df['module_id'].apply(self.history.idx_of_assessment_id)
+
+        student_embeddings_of_ixns = self.student_embeddings[student_idxes, :, df['timestep']]
+        assessment_embeddings_of_ixns = self.assessment_embeddings[assessment_idxes, :]
+        assessment_embedding_norms_of_ixns = np.linalg.norm(assessment_embeddings_of_ixns, axis=1)
+        if self.using_bias:
+            student_biases_of_ixns = self.student_biases[student_idxes]
+            assessment_biases_of_ixns = self.assessment_biases[assessment_idxes]
+        else:
+            student_biases_of_ixns = assessment_biases_of_ixns = 0
+
+        return 1 / (1 + np.exp(-(
+            np.einsum('ij, ij->i', student_embeddings_of_ixns, assessment_embeddings_of_ixns) / \
+                    assessment_embedding_norms_of_ixns - assessment_embedding_norms_of_ixns + \
+                    student_biases_of_ixns + assessment_biases_of_ixns)))
 
 
 class StudentBiasedCoinModel(SkillModel):
     """
     Class for simple skill model where students are modeled as biased
     coins that flip to pass/fail assessments
+    
+    Can be considered a zero-parameter logistic model from Item Response Theory (0PL IRT)
     """
 
     def __init__(
@@ -416,13 +439,13 @@ class StudentBiasedCoinModel(SkillModel):
         Initialize skill model object
 
         :param datatools.InteractionHistory history: An interaction history
+        :param pd.DataFrame|None filtered_history: A filtered interaction history
         """
 
         self.history = history
         if filtered_history is None:
             _logger.warning(
-                'No filtered history available to train biased coin model. \
-                Using full history...')
+                'No filtered history available to train biased coin model. Using full history...')
             self.filtered_history = history.data
         else:
             self.filtered_history = filtered_history
@@ -433,29 +456,33 @@ class StudentBiasedCoinModel(SkillModel):
     def fit(self):
         """
         Estimate pass likelihood for each student
-
-        Uses Laplace smoothing
         """
 
-        df = self.filtered_history[(
-            self.filtered_history['module_type']==datatools.AssessmentInteraction.MODULETYPE)]
+        df = self.filtered_history[self.filtered_history['module_type'] == \
+                datatools.AssessmentInteraction.MODULETYPE]
         df = df.groupby('student_id')
 
         def student_pass_rate(student_id):
+            """
+            Get pass rate of student, using Laplace smoothing
+
+            :param str student_id: An id of a student
+            :rtype: float
+            :return: Smoothed pass rate of student
+            """
             try:
                 outcomes = df.get_group(student_id)['outcome']
             except KeyError: # student only has lesson interactions (no assessments)
-                return 1 / 2
+                return 0.5
             try:
                 num_passes = outcomes.value_counts()[True]
-            except IndexError:
+            except IndexError: # student never passed :(
                 num_passes = 0
             return (num_passes + 1) / (len(outcomes) + 2)
 
         for student_id in self.history.iter_students():
-            student_idx = self.history.idx_of_student_id(student_id)
-            self._student_pass_likelihoods[student_idx] = student_pass_rate(
-                student_id)
+            self._student_pass_likelihoods[self.history.idx_of_student_id(
+                student_id)] = student_pass_rate(student_id)
 
     def assessment_outcome_log_likelihood(
         self,
@@ -467,8 +494,8 @@ class StudentBiasedCoinModel(SkillModel):
         :param dict interaction: An interaction
 
         :param bool|None outcome:
-        If outcome is a bool, it overrides interaction['outcome'].
-        This is useful for SkillModel.assessment_pass_likelihood
+            If outcome is a bool, it overrides interaction['outcome'].
+            This is useful for :py:func:`models.SkillModel.assessment_pass_likelihood`
 
         :rtype: float
         :return: Log-likelihood of assessment result, given student pass rate
@@ -486,11 +513,24 @@ class StudentBiasedCoinModel(SkillModel):
 
         return math.log(outcome_likelihood)
 
+    def assessment_pass_likelihoods(self, df):
+        """
+        Compute pass likelihoods of a set of assessments, given trained model parameters
+
+        :param pd.DataFrame df: A set of assessment interactions
+        :rtype: np.array
+        :return: A list of pass likelihoods
+        """
+
+        return np.array([self._student_pass_likelihoods[student_idx] for student_idx in \
+                df['student_id'].apply(self.history.idx_of_student_id)])
 
 class AssessmentBiasedCoinModel(SkillModel):
     """
     Class for simple skill model where assessments are modeled as biased
     coins that flip to pass/fail students
+
+    Can be considered a zero-parameter logistic model from Item Response Theory (0PL IRT)
     """
 
     def __init__(
@@ -501,47 +541,50 @@ class AssessmentBiasedCoinModel(SkillModel):
         Initialize skill model object
 
         :param datatools.InteractionHistory history: An interaction history
+        :param pd.DataFrame|None filtered_history: A filtered interaction history
         """
 
         self.history = history
         if filtered_history is None:
             _logger.warning(
-                'No filtered history available to train biased coin model. \
-                Using full history...')
+                'No filtered history available to train biased coin model. Using full history...')
             self.filtered_history = history.data
         else:
             self.filtered_history = filtered_history
 
         # assessment_idx -> probability of the assessment being passed by any student
-        self._assessment_pass_likelihoods = np.zeros(
-            self.history.num_assessments())
+        self._assessment_pass_likelihoods = np.zeros(self.history.num_assessments())
 
     def fit(self):
         """
         Estimate pass likelihood for each assessment
-
-        Uses Laplace smoothing
         """
 
-        df = self.filtered_history[(
-            self.filtered_history['module_type']==datatools.AssessmentInteraction.MODULETYPE)]
+        df = self.filtered_history[self.filtered_history['module_type'] == \
+                datatools.AssessmentInteraction.MODULETYPE]
         df = df.groupby('module_id')
 
         def assessment_pass_rate(assessment_id):
+            """
+            Get pass rate of assessment, using Laplace smoothing
+
+            :param str assessment_id: An id of an assessment
+            :rtype: float
+            :return: Smoothed pass rate of assessment
+            """
             try:
                 outcomes = df.get_group(assessment_id)['outcome']
             except KeyError:
-                return 1 / 2
+                return 0.5
             try:
                 num_passes = outcomes.value_counts()[True]
-            except IndexError:
+            except IndexError: # this assessment was never passed
                 num_passes = 0
             return (num_passes + 1) / (len(outcomes) + 2)
 
         for assessment_id in self.history.iter_assessments():
-            assessment_idx = self.history.idx_of_assessment_id(assessment_id)
-            self._assessment_pass_likelihoods[assessment_idx] = assessment_pass_rate(
-                assessment_id)
+            self._assessment_pass_likelihoods[self.history.idx_of_assessment_id(
+                assessment_id)] = assessment_pass_rate(assessment_id)
 
     def assessment_outcome_log_likelihood(
         self,
@@ -553,8 +596,8 @@ class AssessmentBiasedCoinModel(SkillModel):
         :param dict interaction: An interaction
 
         :param bool|None outcome:
-        If outcome is a bool, it overrides interaction['outcome'].
-        This is useful for SkillModel.assessment_pass_likelihood
+            If outcome is a bool, it overrides interaction['outcome'].
+            This is useful for :py:func:`models.SkillModel.assessment_pass_likelihood`
 
         :rtype: float
         :return: Log-likelihood of assessment result, given assessment pass rate
@@ -572,40 +615,53 @@ class AssessmentBiasedCoinModel(SkillModel):
 
         return math.log(outcome_likelihood)
 
+    def assessment_pass_likelihoods(self, df):
+        """
+        Compute pass likelihoods of a set of assessments, given trained model parameters
+
+        :param pd.DataFrame df: A set of assessment interactions
+        :rtype: np.array
+        :return: A list of pass likelihoods
+        """
+
+        return np.array([self._assessment_pass_likelihoods[assessment_idx] for assessment_idx in \
+                df['module_id'].apply(self.history.idx_of_assessment_id)])
+
 class IRTModel(SkillModel):
     """
-    Class for one-parameter logistic item response theory (1PL IRT)
-    model of binary response correctness
+    Superclass for {1, 2}-parameter logistic models of binary response correctness
+    in Item Response Theory
     """
 
     def __init__(
         self,
         history,
-        filtered_history=None,
         select_regularization_constant=False):
         """
         Initialize IRT model
 
-        :param datatools.InteractionHistory history: An interaction history object
-        :param pd.DataFrame filtered_history: A dataframe of interactions
+        :param pd.DataFrame history: A dataframe from an interaction history
         :param bool select_regularization_constant:
-            True => select the L2 regularization constant that maximizes average log-likelihood on a validation set
+            True => select the L2 regularization constant that maximizes average log-likelihood 
+            on a validation set
+            
             False => use default regularization constant 1.
         """
 
-        self.history = history.data if filtered_history is None else filtered_history
-        self.history = self.history[self.history['module_type']==datatools.AssessmentInteraction.MODULETYPE]
+        self.history = history[history['module_type']==datatools.AssessmentInteraction.MODULETYPE]
         self.history.index = range(len(self.history))
 
         self.select_regularization_constant = select_regularization_constant
 
         self.model = None
 
-        self.idx_of_student_id = {k: i for i, k in enumerate(
-                self.history['student_id'].unique())}
+        # need to use history['student_id'] since there might be students 
+        # with only lesson interactions. Note that we still want to estimate proficiencies for
+        # these students, but they will get regularized to zero due to the absence
+        # of any assessment interactions.
+        self.idx_of_student_id = {k: i for i, k in enumerate(history['student_id'].unique())}
         self.num_students = len(self.idx_of_student_id)
-        self.idx_of_assessment_id = {k: i for i, k in enumerate(
-                self.history['module_id'].unique())}
+        self.idx_of_assessment_id = {k: i for i, k in enumerate(history['module_id'].unique())}
         self.num_assessments = len(self.idx_of_assessment_id)
 
     @abstractmethod
@@ -614,8 +670,9 @@ class IRTModel(SkillModel):
         Construct sparse feature matrix for a set of assessment interactions
 
         :param pd.DataFrame df: A set of assessment interactions
-        :rtype scipy.sparse.csr_matrix
-        :return A sparse array of dimensions [n_samples] X [n_features]
+        
+        :rtype: sparse.csr_matrix
+        :return: A sparse array of dimensions [n_samples] X [n_features]
         """
         return
 
@@ -628,6 +685,14 @@ class IRTModel(SkillModel):
 
         Cs = [0.1, 1., 10.]
         def val_log_likelihood(C):
+            """
+            Compute average log-likelihood of IRT model with a specific
+            regularization constant on a validation set
+
+            :param float C: Coefficient of L2 regularization term
+            :rtype: float
+            :return: Average log-likelihood on validation set
+            """
             train_idxes, val_idxes = cross_validation.train_test_split(
                 np.arange(0, len(self.history), 1), train_size=0.7)
             model = LogisticRegression(penalty='l2', C=C)
@@ -639,44 +704,44 @@ class IRTModel(SkillModel):
             return np.mean(log_probas[np.arange(0, len(val_idxes), 1), idx_of_zero ^ Y[val_idxes]])
 
         self.model = LogisticRegression(penalty='l2', C=(
-            1. if not self.select_regularization_constant else max(
-                Cs, key=val_log_likelihood)))
+            1. if not self.select_regularization_constant else max(Cs, key=val_log_likelihood)))
 
         self.model.fit(X, Y)
 
     def assessment_outcome_log_likelihood(self, interaction, outcome=None):
         """
-        Compute the log-likelihood of an assessment outcome,
-        given trained model parameters
+        Compute the log-likelihood of an assessment outcome, given trained model parameters
 
-        :param dict[str, object] interaction: A single interaction
+        :param dict[str,object] interaction: A single interaction
         :param bool|None outcome: If not None, then overrides interaction['outcome']
-        :rtype float
-        :return Log-likelihood of outcome that occurred, under the model
+        
+        :rtype: float
+        :return: Log-likelihood of outcome that occurred, under the model
         """
 
         X = np.zeros(self.num_students+self.num_assessments)
-        X[self.idx_of_student_id[interaction['student_id']]] = X[self.idx_of_assessment_id[interaction['module_id']]] = 1
+        X[self.idx_of_student_id[interaction['student_id']]] = \
+                X[self.idx_of_assessment_id[interaction['module_id']]] = 1
 
         log_proba = self.model.predict_log_proba(X)
 
         idx_of_zero = 1 if self.model.classes_[1]==0 else 0
 
-        return log_proba[0, idx_of_zero ^ (1 if (interaction['outcome'] if outcome is None else outcome) else 0)]
+        return log_proba[0, idx_of_zero ^ (1 if (
+            interaction['outcome'] if outcome is None else outcome) else 0)]
 
     def assessment_pass_likelihoods(self, df):
         """
-        Compute pass likelihoods of a set of assessments,
-        given trained model parameters
+        Compute pass likelihoods of a set of assessments, given trained model parameters
 
         :param pd.DataFrame df: A set of assessment interactions
-        :rtype list[float]
-        :return A list of pass likelihoods
+        :rtype: list[float]
+        :return: A list of pass likelihoods
         """
         X = self.feature_matrix_from_interactions(df)
         probas = self.model.predict_proba(X)
         idx_of_one = 1 if self.model.classes_[1]==1 else 0
-        return list(probas[:, idx_of_one])
+        return probas[:, idx_of_one]
 
 class OneParameterLogisticModel(IRTModel):
     """
@@ -688,18 +753,16 @@ class OneParameterLogisticModel(IRTModel):
         """
         Construct sparse feature matrix for a set of assessment interactions
 
-        The feature vector for an interaction is a binary vector with
-        values for each student (proficiency) and each assessment (difficulty)
+        The feature vector for an interaction is a binary vector with values for each student 
+        (proficiency) and each assessment (difficulty)
 
         :param pd.DataFrame df: A set of assessment interactions
-        :rtype scipy.sparse.csr_matrix
-        :return A sparse array of dimensions [n_samples] X [n_features]
+        :rtype: sparse.csr_matrix
+        :return: A sparse array of dimensions [n_samples] X [n_features]
         """
 
-        student_idxes = np.array(df['student_id'].apply(
-            lambda x: self.idx_of_student_id[x]).values)
-        assessment_idxes = np.array(df['module_id'].apply(
-            lambda x: self.idx_of_assessment_id[x]).values)
+        student_idxes = np.array(df['student_id'].map(self.idx_of_student_id).values)
+        assessment_idxes = np.array(df['module_id'].map(self.idx_of_assessment_id).values)
 
         num_ixns = len(df)
         ixn_idxes = np.concatenate((range(num_ixns), range(num_ixns)), axis=0)
@@ -720,19 +783,16 @@ class TwoParameterLogisticModel(IRTModel):
         """
         Construct sparse feature matrix for a set of assessment interactions
 
-        The feature vector for an interaction is a binary vector with
-        values for each assessment (difficulty) and each student-assessment
-        (proficiency & discriminability) pair
+        The feature vector for an interaction is a binary vector with values for each assessment 
+        (difficulty) and each student-assessment (proficiency & discriminability) pair
 
-        :param pd.DataFrame df: A set of assessment interactions
-        :rtype scipy.sparse.csr_matrix
-        :return A sparse array of dimensions [n_samples] X [n_features]
+        :param pd.DataFrame df: A set of assessment interactions 
+        :rtype: sparse.csr_matrix
+        :return: A sparse array of dimensions [n_samples] X [n_features]
         """
 
-        student_idxes = np.array(df['student_id'].apply(
-            lambda x: self.idx_of_student_id[x]).values)
-        assessment_idxes = np.array(df['module_id'].apply(
-            lambda x: self.idx_of_assessment_id[x]).values)
+        student_idxes = np.array(df['student_id'].map(self.idx_of_student_id).values)
+        assessment_idxes = np.array(df['module_id'].map(self.idx_of_assessment_id).values)
 
         num_ixns = len(df)
         ixn_idxes = np.concatenate((range(num_ixns), range(num_ixns)), axis=0)
@@ -743,3 +803,54 @@ class TwoParameterLogisticModel(IRTModel):
         return sparse.coo_matrix(
             (np.ones(2*num_ixns), (ixn_idxes, studa_idxes)),
             shape=(num_ixns, (self.num_students + 1) * self.num_assessments)).tocsr()
+
+
+class MIRTModel(object):
+    """
+    Class for multi-dimensional item response theory model
+    """
+
+    def __init__(self, history, dims):
+        """
+        Initialize model object
+
+        :param datatools.InteractionHistory history: An interaction history
+        :param int dims: Number of dimensions
+        """
+
+        self.history = history
+        self.dims = dims
+
+        self.student_factors = np.zeros((self.history.num_students(), self.dims))
+        self.assessment_factors = np.zeros((self.history.num_assessments(), self.dims))
+        self.assessment_offsets = np.zeros(self.history.num_assessments())
+
+    def fit(self, estimator):
+        """
+        Fit model parameters to interaction history
+
+        :param est.MIRTMAPEstimator estimator: An object for parameter estimation
+        """
+
+        estimator.fit_model(self)
+
+    def assessment_pass_likelihoods(self, df):
+        """
+        Compute pass likelihoods of assessment interactions, given trained model parameters
+
+        :param pd.DataFrame df: A set of assessment interactions
+        :rtype: np.array
+        :return: A list of pass likelihoods
+        """
+
+        student_idxes = df['student_id'].apply(self.history.idx_of_student_id)
+        assessment_idxes = df['assessment_id'].apply(self.history.idx_of_assessment_id)
+        
+        student_factors_of_ixns = self.student_factors[student_idxes, :]
+        assessment_factors_of_ixns = self.assessment_factors[assessment_idxes, :]
+        assessment_offsets_of_ixns = self.assessment_offsets[assessment_idxes]
+
+        return 1 / (1 + np.exp(-(np.einsum(
+            'ij, ij->i', 
+            student_factors_of_ixns, assessment_factors_of_ixns) + assessment_offsets_of_ixns)))
+

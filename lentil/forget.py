@@ -1,7 +1,7 @@
 """
 Module for models of offline learning and forgetting
+
 @author Siddharth Reddy <sgr45@cornell.edu>
-07/16/15
 """
 
 from abc import abstractmethod
@@ -37,8 +37,9 @@ class LinearLUVModel(TimeVaryingLUVModel):
         """
         Initialize a linear model of time-varying learning update variance
 
-        :param float alpha: Coefficient
-        :param float beta: Offset
+        :param float alpha: Coefficient, which controls how sensitive variance is
+            to log(time since previous interaction)
+        :param float beta: Offset, which controls the baseline variance
         """
 
         self.alpha = alpha
@@ -69,10 +70,9 @@ class LogisticLUVModel(TimeVaryingLUVModel):
         """
         Initialize a linear model of time-varying learning update variance
 
-        QUESTION: What does the coeff vs the offset represent here?
-
-        :param float alpha: Coefficient
-        :param float beta: Offset
+        :param float alpha: Coefficient, which controls how sensitive variance is
+            to log(time since previous interaction)
+        :param float beta: Offset, which controls the baseline variance
         """
 
         self.alpha = alpha
@@ -91,8 +91,6 @@ class LogisticLUVModel(TimeVaryingLUVModel):
 
         return self.beta / (1 + np.exp(-self.alpha * np.log(
             times_since_prev_ixn_for_lesson_ixns+1)))
-
-# QUESTION: Ditto below having a bit more description about Coefficient and Offset
 
 
 class ForgettingModel(object):
@@ -124,8 +122,9 @@ class LinearForgettingModel(ForgettingModel):
         """
         Initialize a linear forgetting model
 
-        :param float alpha: Coefficient
-        :param float beta: Offset
+        :param float alpha: Coefficient, which controls how sensitive the forgetting penalty is
+            to log(time since previous interaction)
+        :param float beta: Offset, which controls the baseline variance
         """
 
         self.alpha = alpha
@@ -143,7 +142,7 @@ class LinearForgettingModel(ForgettingModel):
             one for each lesson interaction
         """
 
-        return self.alpha * np.log(times_since_prev_ixn_for_lesson_ixns+1) + self.beta
+        return -(self.alpha * np.log(times_since_prev_ixn_for_lesson_ixns+1) + self.beta)
 
 
 class LogisticForgettingModel(ForgettingModel):
@@ -157,8 +156,9 @@ class LogisticForgettingModel(ForgettingModel):
         """
         Initialize a logistic forgetting model
 
-        :param float alpha: Coefficient
-        :param float beta: Offset
+        :param float alpha: Coefficient, which controls how sensitive the forgetting penalty is
+            to log(time since previous interaction)
+        :param float beta: Offset, which controls the baseline forgetting penalty
         """
 
         self.alpha = alpha
@@ -175,5 +175,6 @@ class LogisticForgettingModel(ForgettingModel):
             from the means of Gaussian learning updates
         """
 
-        return self.beta / (1 + np.exp(-self.alpha * np.log(
+        return -self.beta / (1 + np.exp(-self.alpha * np.log(
             times_since_prev_ixn_for_lesson_ixns+1)))
+

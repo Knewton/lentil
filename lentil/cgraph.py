@@ -17,11 +17,11 @@ class ConceptGraph(object):
         """
         Initialize concept graph object
 
-        :param dict[str, set[str]] concepts_of_module:
-            A dictionary mapping module id to set(concept ids)
+        :param dict[str,set[str]] concepts_of_module:
+            A dictionary mapping module id to a set of concept ids
 
-        :param dict[str, set[str]] prereqs_of_concept:
-            A dictionary mapping concept id to set(prereq concept ids)
+        :param dict[str,set[str]] prereqs_of_concept:
+            A dictionary mapping concept id to a set of prereq concept ids
         """
 
         self.concepts_of_module = concepts_of_module
@@ -38,11 +38,14 @@ class ConceptGraph(object):
         """
         Get a list of concept-module edges in the graph
 
-        :param function iter_modules: InteractionHistory.iter_assessments
-            or InteractionHistory.iter_lessons
-        :param function idx_of_module_id: InteractionHistory.idx_of_assessment_id
-            or InteractionHistory.idx_of_lesson_id
-        :rtype: (np.array, np.array, int, int, np.array)
+        :param function iter_modules: :py:func:`datatools.InteractionHistory.iter_assessments`
+            or :py:func:`InteractionHistory.iter_lessons`
+        
+        :param function idx_of_module_id: 
+            :py:func:`datatools.InteractionHistory.idx_of_assessment_id` or 
+            :py:func:`datatools.InteractionHistory.idx_of_lesson_id`
+
+        :rtype: (np.array,np.array,int,int,np.array)
         :return: A tuple of (module indexes, concept indexes,
             number of unique modules, number of unique concepts,
             number of concepts for each module in the first array of this tuple)
@@ -55,12 +58,11 @@ class ConceptGraph(object):
         num_concepts_of_modules = np.array(
             [len(self.concepts_of_module[module_id]) for module_id in module_ids])
 
-        # QUESTION: Do you care about modules without concepts? Or else len(module_ids)
-        #           and sum(1 for _ in iter_modules()) won't match.
-        num_modules = len(module_ids)
+        num_modules = sum(1 for _ in iter_modules())
 
         module_idxes = np.array([idx_of_module_id(module_id) for module_id in module_ids])
-        concept_idxes = np.array([self.idx_of_concept_id[concept_id] for concept_id in concept_ids])
+        concept_idxes = np.array(
+                [self.idx_of_concept_id[concept_id] for concept_id in concept_ids])
 
         return (
             module_idxes, concept_idxes,
@@ -77,7 +79,7 @@ class ConceptGraph(object):
 
         Also returns the number of concepts in the graph for bookkeeping purposes.
 
-        :rtype: (np.array, np.array, int)
+        :rtype: (np.array,np.array,int)
         :return: A tuple of (prereq_concept_idxes, postreq_concept_idxes, num_concepts)
         """
 
@@ -88,6 +90,8 @@ class ConceptGraph(object):
             prereq_ids.extend(my_prereq_ids)
 
         prereq_idxes = np.array([self.idx_of_concept_id[concept_id] for concept_id in prereq_ids])
-        postreq_idxes = np.array([self.idx_of_concept_id[concept_id] for concept_id in postreq_ids])
+        postreq_idxes = np.array(
+                [self.idx_of_concept_id[concept_id] for concept_id in postreq_ids])
 
         return (prereq_idxes, postreq_idxes, self.num_concepts)
+

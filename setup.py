@@ -18,15 +18,19 @@ class PyTest(TestCommand):
 
 setup(
     name="lentil",
-    version='0.1',
-    url="http://www.knewton.com/",
+    version='0.0.0',
+    url="http://siddharth.io/lentil",
     author="Siddharth Reddy",
     author_email="sgr45@cornell.edu",
     license="Apache License",
     packages=find_packages(),
-    cmdclass={"test": PyTest},
-    install_requires=open('requirements.txt', 'r').readlines(),
-    tests_require=open('requirements.testing.txt', 'r').readlines(),
-    description="A latent skill embedding model of students, assessments, and lessons",
-    long_description="\n" + open('README.md').read()
+    test_suite='tests',
+    cmdclass={"test" : PyTest},
+    description="A probabilistic model of student learning and assessment",
+    long_description="\n" + open('README.md').read(),
+    entry_points='''
+        [console_scripts]
+        lse_train=scripts.lse_train:cli
+        lse_eval=scripts.lse_eval:cli
+    '''
 )

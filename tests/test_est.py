@@ -1,8 +1,7 @@
 """
-Module for unit tests that check if parameter estimation
-converges for toy examples
+Module for unit tests that check if parameter estimation converges for toy examples
+
 @author Siddharth Reddy <sgr45@cornell.edu>
-07/15/15
 """
 
 import copy
@@ -15,6 +14,7 @@ import numpy as np
 from lentil import models
 from lentil import est
 from lentil import toy
+
 
 logging.basicConfig()
 _logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ class TestEstimators(unittest.TestCase):
         """
         A one-dimensional embedding, where a single latent skill is enough
         to explain the data. The key observation here is that the model
-        recovered positive skill gains for $L_1$, and ``correctly" arranged
+        recovered positive skill gains for $L_1$, and "correctly" arranged
         students and assessments in the latent space. Initially, Carter
         fails both assessments, so his skill level is behind the requirements
         of both assessments. Lee passes A1 but fails A2, so his skill
@@ -55,24 +55,28 @@ class TestEstimators(unittest.TestCase):
 
         embedding_dimension = 1
 
-        model = models.EmbeddingModel(
-            history,
-            embedding_dimension,
-            using_lessons=True,
-            using_prereqs=False,
-            using_bias=False,
-            learning_update_variance_constant=0.5)
-
         estimator = est.EmbeddingMAPEstimator(
             regularization_constant=1e-6,
             using_scipy=True,
             verify_gradient=True,
             debug_mode_on=False)
 
-        model.fit(estimator)
-
         eps = 1e-6
-        self.assertTrue(estimator.fd_err < eps)
+
+        using_l1_regularizer_configs = [True, False]
+        for using_l1_regularizer in using_l1_regularizer_configs:
+            model = models.EmbeddingModel(
+                history,
+                embedding_dimension,
+                using_lessons=True,
+                using_prereqs=False,
+                using_bias=False,
+                using_l1_regularizer=using_l1_regularizer,
+                learning_update_variance_constant=0.5)
+
+            model.fit(estimator)
+
+            self.assertTrue(estimator.fd_err < eps)
 
     def test_assessment_grid(self):
         """
@@ -80,8 +84,13 @@ class TestEstimators(unittest.TestCase):
         somewhere in the middle of it
         """
 
-        model = toy.get_assessment_grid_model()
-        true_model = copy.deepcopy(model)
+        embedding_kwargs = {
+            'embedding_dimension' : 2,
+            'using_lessons' : False,
+            'using_prereqs' : False,
+            'using_bias' : False,
+            'learning_update_variance_constant' : 0.5
+        }
 
         estimator = est.EmbeddingMAPEstimator(
             regularization_constant=1e-6,
@@ -89,10 +98,16 @@ class TestEstimators(unittest.TestCase):
             verify_gradient=True,
             debug_mode_on=False)
 
-        model.fit(estimator)
-
         eps = 1e-3
-        self.assertTrue(estimator.fd_err < eps)
+
+        using_l1_regularizer_configs = [True, False]
+        for using_l1_regularizer in using_l1_regularizer_configs:
+            embedding_kwargs.update({'using_l1_regularizer' : using_l1_regularizer})
+            model = toy.get_assessment_grid_model(embedding_kwargs)
+
+            model.fit(estimator)
+
+            self.assertTrue(estimator.fd_err < eps)
 
     def test_independent_assessments(self):
         """
@@ -116,28 +131,32 @@ class TestEstimators(unittest.TestCase):
 
         embedding_dimension = 2
 
-        model = models.EmbeddingModel(
-            history,
-            embedding_dimension,
-            using_prereqs=False,
-            using_lessons=False,
-            using_bias=False,
-            learning_update_variance_constant=0.5)
-
         estimator = est.EmbeddingMAPEstimator(
             regularization_constant=1e-6,
             using_scipy=True,
             verify_gradient=True,
             debug_mode_on=False)
 
-        model.fit(estimator)
-
         eps = 1e-6
-        self.assertTrue(estimator.fd_err < eps)
+
+        using_l1_regularizer_configs = [True, False]
+        for using_l1_regularizer in using_l1_regularizer_configs:
+            model = models.EmbeddingModel(
+                history,
+                embedding_dimension,
+                using_prereqs=False,
+                using_lessons=False,
+                using_bias=False,
+                using_l1_regularizer=using_l1_regularizer,
+                learning_update_variance_constant=0.5)
+
+            model.fit(estimator)
+
+            self.assertTrue(estimator.fd_err < eps)
 
     def test_independent_lessons(self):
         """
-        We replicate the setting in Figure \ref{fig:superbad}, then add two
+        We replicate the setting in test_independent_assessments, then add two
         new students Slater and Michaels, and two new lesson modules $L_1$
         and L2. Slater is initially identical to Evan, while Michaels is
         initially identical to Seth. Slater reads lesson $L_1$, then passes
@@ -155,28 +174,32 @@ class TestEstimators(unittest.TestCase):
 
         embedding_dimension = 2
 
-        model = models.EmbeddingModel(
-            history,
-            embedding_dimension,
-            using_prereqs=False,
-            using_lessons=True,
-            using_bias=False,
-            learning_update_variance_constant=0.5)
-
         estimator = est.EmbeddingMAPEstimator(
             regularization_constant=1e-6,
             using_scipy=True,
             verify_gradient=True,
             debug_mode_on=False)
 
-        model.fit(estimator)
-
         eps = 1e-6
-        self.assertTrue(estimator.fd_err < eps)
+
+        using_l1_regularizer_configs = [True, False]
+        for using_l1_regularizer in using_l1_regularizer_configs:
+            model = models.EmbeddingModel(
+                history,
+                embedding_dimension,
+                using_prereqs=False,
+                using_lessons=True,
+                using_bias=False,
+                using_l1_regularizer=using_l1_regularizer,
+                learning_update_variance_constant=0.5)
+
+            model.fit(estimator)
+
+            self.assertTrue(estimator.fd_err < eps)
 
     def test_lesson_prereqs(self):
         """
-        We replicate the setting in Figure \ref{fig:superbad}, then add a new
+        We replicate the setting in test_independent_assessments, then add a new
         assessment module A3 and a new lesson module L1. All students
         initially fail assessment A3, then read lesson L1, after which
         McLovin passes A3 while everyone else still fails A3. The key
@@ -189,24 +212,28 @@ class TestEstimators(unittest.TestCase):
 
         embedding_dimension = 2
 
-        model = models.EmbeddingModel(
-            history,
-            embedding_dimension,
-            using_lessons=True,
-            using_prereqs=True,
-            using_bias=False,
-            learning_update_variance_constant=0.5)
-
         estimator = est.EmbeddingMAPEstimator(
             regularization_constant=1e-6,
             using_scipy=True,
             verify_gradient=True,
             debug_mode_on=False)
 
-        model.fit(estimator)
-
         eps = 1e-6
-        self.assertTrue(estimator.fd_err < eps)
+
+        using_l1_regularizer_configs = [True, False]
+        for using_l1_regularizer in using_l1_regularizer_configs:
+            model = models.EmbeddingModel(
+                history,
+                embedding_dimension,
+                using_prereqs=False,
+                using_lessons=True,
+                using_bias=False,
+                using_l1_regularizer=using_l1_regularizer,
+                learning_update_variance_constant=0.5)
+
+            model.fit(estimator)
+
+            self.assertTrue(estimator.fd_err < eps)
 
     def test_using_bias(self):
         """
@@ -217,24 +244,32 @@ class TestEstimators(unittest.TestCase):
 
         embedding_dimension = 2
 
-        model = models.EmbeddingModel(
-            history,
-            embedding_dimension,
-            using_lessons=True,
-            using_prereqs=False,
-            using_bias=True,
-            learning_update_variance_constant=0.5)
-
         estimator = est.EmbeddingMAPEstimator(
             regularization_constant=1e-6,
             using_scipy=True,
             verify_gradient=True,
             debug_mode_on=False)
 
-        model.fit(estimator)
-
         eps = 1e-6
-        self.assertTrue(estimator.fd_err < eps)
 
+        using_l1_regularizer_configs = [True, False]
+        for using_l1_regularizer in using_l1_regularizer_configs:
+            model = models.EmbeddingModel(
+                history,
+                embedding_dimension,
+                using_prereqs=False,
+                using_lessons=True,
+                using_bias=False,
+                using_l1_regularizer=using_l1_regularizer,
+                learning_update_variance_constant=0.5)
+
+            model.fit(estimator)
+
+            self.assertTrue(estimator.fd_err < eps)
+
+    # TODO: add unit tests for tv_luv_model, forgetting_model, using_graph_prior=True,
+    # and using_lessons=False for temporal process on student
+    
 if __name__ == '__main__':
     unittest.main()
+
