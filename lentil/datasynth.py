@@ -18,7 +18,7 @@ def sample_synthetic_model_and_history(
     sample_interactions,
     sample_lessons=None,
     sample_prereqs=None,
-    embedding_kwargs={}):
+    embedding_kwargs=None):
     """
     Sample a synthetic skill embedding and interaction history
 

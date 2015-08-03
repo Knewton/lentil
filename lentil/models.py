@@ -807,7 +807,13 @@ class TwoParameterLogisticModel(IRTModel):
 
 class MIRTModel(object):
     """
-    Class for multi-dimensional item response theory model
+    Class for multi-dimensional item response theory (MIRT) model,
+    which is a generalization of the uni-dimensional two-parameter logistic model (2PL)
+
+    The item response function becomes Pr(pass) = f((S dot A) + offset)
+    where S is the d-dimensional vector for the student, A is the d-dimensional vector 
+    for the assessment, the offset is an assessment-specific constant, 
+    and f is the logistic function
     """
 
     def __init__(self, history, dims):

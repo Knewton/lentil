@@ -152,8 +152,7 @@ def training_auc(
 
     train_assessment_interactions = history.data[history.data['module_type'] == \
             datatools.AssessmentInteraction.MODULETYPE]
-    train_y_true = list(
-            train_assessment_interactions['outcome'].apply(lambda x: 1 if x else -1))
+    train_y_true = train_assessment_interactions['outcome'] * 2 - 1
     train_probas_pred = model.assessment_pass_likelihoods(train_assessment_interactions)
     y_true = [x for x, y in zip(train_y_true, train_probas_pred) if not np.isnan(y)]
     probas_pred = [y for y in train_probas_pred if not np.isnan(y)]

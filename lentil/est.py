@@ -75,8 +75,8 @@ def gradient_descent(
         raise ValueError('eps must be positive not {}'.format(eps))
     if num_checkpoints <= 1:
         raise ValueError('Must have at least two checkpoints not {}'.format(num_checkpoints))
-    if max_iter<=0:
-        raise ValueError('Maximum number of iterations is strictly positive')
+    if max_iter <= 0:
+        raise ValueError('Maximum number of iterations must be strictly positive')
 
     if using_adagrad:
         # historical gradient (for Adagrad)
@@ -181,12 +181,14 @@ def gradient_descent(
         ax.set_ylabel('Cost')
         ax.plot(costs)
         plt.show()
+        
+        _, ax = plt.subplots()
+        ax.set_xlabel('Iteration')
+        ax.set_ylabel('L2 norm of gradient')
         for k, v in gradient_norms.iteritems():
-            _, ax = plt.subplots()
-            ax.set_xlabel('Iteration')
-            ax.set_ylabel('Euclidean norm of g' + k)
-            ax.plot(v)
-            plt.show()
+            ax.plot(v, label=k)
+        ax.legend(loc='upper right')
+        plt.show()
 
     return params
 
@@ -629,7 +631,7 @@ class EmbeddingMAPEstimator(object):
 
 class MIRTMAPEstimator(object):
     """
-    Class for estimating parameters of mult-dimensional item response theory model
+    Class for estimating parameters of multi-dimensional item response theory (MIRT) model
     """
 
     def __init__(
