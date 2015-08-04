@@ -46,7 +46,7 @@ def plot_embedding(
     Students, assessments, prereqs = points
     Lessons = vectors
 
-    See nb/synthetic_experiments.ipynb for example invocations
+    See nb/toy_examples.ipynb for example invocations
 
     :param EmbeddingModel model: A skill embedding model
     :param int timestep: A timestep. By default, timestep=-1 => latest snapshot

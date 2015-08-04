@@ -850,7 +850,7 @@ class MIRTModel(object):
         """
 
         student_idxes = df['student_id'].apply(self.history.idx_of_student_id)
-        assessment_idxes = df['assessment_id'].apply(self.history.idx_of_assessment_id)
+        assessment_idxes = df['module_id'].apply(self.history.idx_of_assessment_id)
         
         student_factors_of_ixns = self.student_factors[student_idxes, :]
         assessment_factors_of_ixns = self.assessment_factors[assessment_idxes, :]

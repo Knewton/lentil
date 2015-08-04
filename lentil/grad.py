@@ -1594,7 +1594,7 @@ def with_scipy_without_lessons(
     stud_grad_from_norm_regularization = 2 * student_regularization_constant * student_embeddings
     gradient[:last_student_embedding_idx] = (
         stud_grad_from_asmt_ixns + stud_grad_from_temporal_process + \
-                stud_grad_from_norm_regularization).flatten()
+                stud_grad_from_norm_regularization).ravel()
 
     # compute the gradient w.r.t. assessment embeddings,
     # which is the sum of gradient of the log-likelihood of assessment interactions
@@ -1621,18 +1621,18 @@ def with_scipy_without_lessons(
                 assessment_embeddings
     gradient[last_student_embedding_idx:last_assessment_embedding_idx] = (
         asmt_grad_from_asmt_ixns + asmt_grad_from_graph_regularization + \
-                asmt_grad_from_norm_regularization).flatten()
+                asmt_grad_from_norm_regularization).ravel()
 
     if using_bias:
         # compute the gradient w.r.t. student biases,
         # which is the sum of gradient of the log-likelihood of assessment interactions
         gradient[last_assessment_embedding_idx:last_student_bias_idx] = \
-                -student_bias_participation_in_assessment_ixns.dot(mult_diff).flatten()
+                -student_bias_participation_in_assessment_ixns.dot(mult_diff).ravel()
 
         # compute the gradient w.r.t. assessment biases,
         # which is the sum of gradient of the log-likelihood of assessment interactions
         gradient[last_student_bias_idx:last_assessment_bias_idx] = \
-                -assessment_participation_in_assessment_ixns.dot(mult_diff).flatten()
+                -assessment_participation_in_assessment_ixns.dot(mult_diff).ravel()
 
     if using_graph_prior:
         # compute the gradient w.r.t. concept embeddings,
@@ -1653,7 +1653,7 @@ def with_scipy_without_lessons(
                 concept_embeddings
         gradient[last_assessment_bias_idx:] = (graph_regularization_constant * (
             concept_grad_from_assessments + concept_grad_from_prereqs + \
-                    concept_grad_from_postreqs) + concept_grad_from_norm_regularization).flatten()
+                    concept_grad_from_postreqs) + concept_grad_from_norm_regularization).ravel()
 
     cost_from_assessment_ixns = np.einsum('ij->', np.log(one_plus_exp_diff))
     if using_temporal_process:
@@ -2025,7 +2025,7 @@ def with_scipy_with_prereqs(
     stud_grad_from_norm_regularization = 2 * student_regularization_constant * student_embeddings
     gradient[:last_student_embedding_idx] = (
         stud_grad_from_asmt_ixns + stud_grad_from_lesson_ixns + \
-                stud_grad_from_norm_regularization).flatten()
+                stud_grad_from_norm_regularization).ravel()
 
     # compute the gradient w.r.t. assessment embeddings,
     # which is the sum of gradient of the log-likelihood of assessment interactions
@@ -2051,7 +2051,7 @@ def with_scipy_with_prereqs(
                 assessment_embeddings
     gradient[last_student_embedding_idx:last_assessment_embedding_idx] = (
         asmt_grad_from_asmt_ixns + asmt_grad_from_graph_regularization + \
-                asmt_grad_from_norm_regularization).flatten()
+                asmt_grad_from_norm_regularization).ravel()
 
     # compute the gradient w.r.t. lesson embeddings,
     # which is the sum of gradient of the log-likelihood of assessment and lesson interactions
@@ -2071,7 +2071,7 @@ def with_scipy_with_prereqs(
                 lesson_embeddings
     gradient[last_assessment_embedding_idx:last_lesson_embedding_idx] = (
         lesson_grad_from_lesson_ixns + lesson_grad_from_graph_regularization + \
-                lesson_grad_from_norm_regularization).flatten()
+                lesson_grad_from_norm_regularization).ravel()
 
     # compute the gradient w.r.t. prereq embeddings,
     # which is the sum of gradient of the log-likelihood of assessment and lesson interactions
@@ -2086,18 +2086,18 @@ def with_scipy_with_prereqs(
                         prereq_embeddings_for_lesson_ixns))
     prereq_grad_from_norm_regularization = 2 * prereq_regularization_constant * prereq_embeddings
     gradient[last_lesson_embedding_idx:last_prereq_embedding_idx] = (
-            prereq_grad_from_lesson_ixns + prereq_grad_from_norm_regularization).flatten()
+            prereq_grad_from_lesson_ixns + prereq_grad_from_norm_regularization).ravel()
 
     if using_bias:
         # compute the gradient w.r.t. student biases,
         # which is the sum of gradient of the log-likelihood of assessment interactions
         gradient[last_prereq_embedding_idx:last_student_bias_idx] = \
-                -student_bias_participation_in_assessment_ixns.dot(mult_diff).flatten()
+                -student_bias_participation_in_assessment_ixns.dot(mult_diff).ravel()
 
         # compute the gradient w.r.t. assessment biases,
         # which is the sum of gradient of the log-likelihood of assessment interactions
         gradient[last_student_bias_idx:last_assessment_bias_idx] = \
-                -assessment_participation_in_assessment_ixns.dot(mult_diff).flatten()
+                -assessment_participation_in_assessment_ixns.dot(mult_diff).ravel()
 
     if using_graph_prior:
         # compute the gradient w.r.t. concept embeddings,
@@ -2119,7 +2119,7 @@ def with_scipy_with_prereqs(
 
         gradient[last_assessment_bias_idx:] = graph_regularization_constant * (
             concept_grad_from_assessments + concept_grad_from_lessons + concept_grad_from_prereqs +
-            concept_grad_from_postreqs).flatten()
+            concept_grad_from_postreqs).ravel()
 
     cost_from_assessment_ixns = np.einsum('ij->', np.log(one_plus_exp_diff))
     cost_from_lesson_ixns = np.einsum('ij, ij', diffs, diffs) / (2 * learning_update_variance)
@@ -2466,7 +2466,7 @@ def with_scipy_without_prereqs(
     stud_grad_from_norm_regularization = 2 * student_regularization_constant * student_embeddings
     gradient[:last_student_embedding_idx] = (
         stud_grad_from_asmt_ixns + stud_grad_from_lesson_ixns + \
-                stud_grad_from_norm_regularization).flatten()
+                stud_grad_from_norm_regularization).ravel()
 
     # compute the gradient w.r.t. assessment embeddings,
     # which is the sum of gradient of the log-likelihood of assessment interactions
@@ -2492,7 +2492,7 @@ def with_scipy_without_prereqs(
                 assessment_embeddings
     gradient[last_student_embedding_idx:last_assessment_embedding_idx] = (
         asmt_grad_from_asmt_ixns + asmt_grad_from_graph_regularization + \
-                asmt_grad_from_norm_regularization).flatten()
+                asmt_grad_from_norm_regularization).ravel()
 
     # compute the gradient w.r.t. lesson embeddings,
     # which is the sum of gradient of the log-likelihood of assessment and lesson interactions
@@ -2511,18 +2511,18 @@ def with_scipy_without_prereqs(
                 lesson_embeddings
     gradient[last_assessment_embedding_idx:last_lesson_embedding_idx] = (
         lesson_grad_from_lesson_ixns + lesson_grad_from_graph_regularization + \
-                lesson_grad_from_norm_regularization).flatten()
+                lesson_grad_from_norm_regularization).ravel()
 
     if using_bias:
         # compute the gradient w.r.t. student biases,
         # which is the sum of gradient of the log-likelihood of assessment interactions
         gradient[last_lesson_embedding_idx:last_student_bias_idx] = \
-                -student_bias_participation_in_assessment_ixns.dot(mult_diff).flatten()
+                -student_bias_participation_in_assessment_ixns.dot(mult_diff).ravel()
 
         # compute the gradient w.r.t. assessment biases,
         # which is the sum of gradient of the log-likelihood of assessment interactions
         gradient[last_student_bias_idx:last_assessment_bias_idx] = \
-                -assessment_participation_in_assessment_ixns.dot(mult_diff).flatten()
+                -assessment_participation_in_assessment_ixns.dot(mult_diff).ravel()
 
     if using_graph_prior:
         # compute the gradient w.r.t. concept embeddings,
@@ -2547,7 +2547,7 @@ def with_scipy_without_prereqs(
         gradient[last_assessment_bias_idx:] = (graph_regularization_constant * (
             concept_grad_from_assessments + concept_grad_from_lessons + \
                     concept_grad_from_prereqs + concept_grad_from_postreqs) + \
-                    concept_grad_from_norm_regularization).flatten()
+                    concept_grad_from_norm_regularization).ravel()
 
     cost_from_assessment_ixns = np.einsum('ij->', np.log(one_plus_exp_diff))
     cost_from_lesson_ixns = np.einsum('ij, ij', diffs, diffs) / (2 * learning_update_variance)

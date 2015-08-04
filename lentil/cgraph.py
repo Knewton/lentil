@@ -39,7 +39,7 @@ class ConceptGraph(object):
         Get a list of concept-module edges in the graph
 
         :param function iter_modules: :py:func:`datatools.InteractionHistory.iter_assessments`
-            or :py:func:`InteractionHistory.iter_lessons`
+            or :py:func:`datatools.InteractionHistory.iter_lessons`
         
         :param function idx_of_module_id: 
             :py:func:`datatools.InteractionHistory.idx_of_assessment_id` or 

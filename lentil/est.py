@@ -88,7 +88,7 @@ def gradient_descent(
     if verify_gradient:
         # check accuracy of gradient function using finite differences
         # TODO: move this check into a test suite and automate checking for correctness
-        # for now, set verify_gradient=True in a notebook (e.g., nb/synthetic_experiments.ipynb)
+        # for now, set verify_gradient=True in a notebook (e.g., nb/toy_examples.ipynb)
         # and look at the scatterplots/histograms yourself
         g, cst = grads(params)
 
@@ -157,6 +157,7 @@ def gradient_descent(
             else:
                 params[k] -= rate * v
 
+            # projected gradient
             params[k] = param_constraint_funcs[k](params[k])
 
         for k in params:
@@ -203,6 +204,7 @@ class EmbeddingMAPEstimator(object):
         self,
         regularization_constant=1e-6,
         ftol=1e-3,
+        max_iter=1000,
         gradient_descent_kwargs={},
         initial_param_vals={},
         using_scipy=True,
@@ -217,6 +219,8 @@ class EmbeddingMAPEstimator(object):
         :param float ftol: Stopping condition
             When relative difference between consecutive cost function evaluations
             drops below ftol, then the iterative optimization has "converged"
+
+        :param int max_iter: Maximum number of iterations for L-BFGS-B
 
         :param dict[str,object] gradient_descent_kwargs: Arguments for gradient_descent
         :param dict[str,np.ndarray] initial_param_vals: For warm starts
@@ -261,6 +265,7 @@ class EmbeddingMAPEstimator(object):
         self.filtered_history = filtered_history
         self.split_history = split_history
         self.ftol = ftol
+        self.max_iter = max_iter
 
         self.using_scipy = using_scipy
         self.verify_gradient = verify_gradient
@@ -553,8 +558,7 @@ class EmbeddingMAPEstimator(object):
                     tuple([param_shapes] + grad_args)) / math.sqrt(param_vals.size)
 
                 _logger.debug(
-                    'Root-mean-squared error of (forward) finite difference \
-                    vs. analytic gradient = %f', self.fd_err)
+                    'RMSE of (forward) finite difference vs. analytic gradient = %f', self.fd_err)
 
             map_estimates = optimize.minimize(
                 grads,
@@ -565,7 +569,8 @@ class EmbeddingMAPEstimator(object):
                 bounds=box_constraints,
                 options={
                     'disp': self.debug_mode_on,
-                    'ftol' : self.ftol
+                    'ftol' : self.ftol,
+                    'maxiter' : self.max_iter
                     })
 
             # reshape parameter estimates from flattened array into tensors and matrices
@@ -632,13 +637,17 @@ class EmbeddingMAPEstimator(object):
 class MIRTMAPEstimator(object):
     """
     Class for estimating parameters of multi-dimensional item response theory (MIRT) model
+    by maximizing the log-likelihood of interactions (with L2 regularization on student 
+    and assessment factors)
     """
 
     def __init__(
         self,
         regularization_constant=1e-3,
         ftol=1e-3,
+        max_iter=1000,
         verify_gradient=False,
+        debug_mode_on=False,
         filtered_history=None,
         split_history=None):
         """
@@ -649,10 +658,13 @@ class MIRTMAPEstimator(object):
             When relative difference between consecutive cost function evaluations
             drops below ftol, then the iterative optimization has "converged"
 
+        :param int max_iter: Maximum number of iterations of BFGS
         :param bool verify_gradient: 
             True => use :py:func:`scipy.optimize.check_grad` to verify
             accuracy of analytic gradient
 
+        :param bool debug_mode_on: True => display BFGS iterations
+    
         :param pd.DataFrame|None filtered_history: A filtered history to be used instead of
             the history attached to the model passed to :py:func:`est.MIRTMAPEstimator.fit_model`
 
@@ -671,9 +683,11 @@ class MIRTMAPEstimator(object):
 
         self.regularization_constant = regularization_constant
         self.ftol = ftol
+        self.max_iter = max_iter
         self.filtered_history = filtered_history
         self.split_history = split_history
         self.verify_gradient = verify_gradient
+        self.debug_mode_on = debug_mode_on
 
     def fit_model(self, model):
         """
@@ -683,5 +697,167 @@ class MIRTMAPEstimator(object):
         :param models.MIRTModel model: A mult-dimensional IRT model that needs to be fit
             to its interaction history
         """
-        raise NotImplementedError
+
+        param_shapes = {
+            models.STUDENT_FACTORS : model.student_factors.shape,
+            models.ASSESSMENT_FACTORS : model.assessment_factors.shape
+            }
+
+        last_student_factor_idx = model.student_factors.size
+        last_assessment_factor_idx = last_student_factor_idx + model.assessment_factors.size
+
+        if self.split_history is None:
+            split_history = model.history.split_interactions_by_type(
+                    filtered_history=self.filtered_history,
+                    insert_dummy_lesson_ixns=False)
+        else:
+            split_history = self.split_history
+        assessment_interactions = split_history.assessment_interactions
+
+        student_idxes_of_ixns, assessment_idxes_of_ixns, outcomes = assessment_interactions
+        # TODO: explain
+        student_idxes_of_ixns = student_idxes_of_ixns // model.history.duration()
+        assessment_interactions = student_idxes_of_ixns, assessment_idxes_of_ixns, outcomes
+        
+        num_ixns = len(student_idxes_of_ixns)
+        num_students = model.history.num_students()
+        student_participation = sparse.coo_matrix(
+            (np.ones(num_ixns), 
+                (student_idxes_of_ixns, np.arange(0, num_ixns, 1))), 
+            shape=(num_students, num_ixns)).tocsr()
+        num_assessments = model.history.num_assessments()
+        assessment_participation = sparse.coo_matrix(
+            (np.ones(num_ixns),
+                (assessment_idxes_of_ixns, np.arange(0, num_ixns, 1))),
+            shape=(num_assessments, num_ixns)).tocsr()
+
+        def gradient(
+            params, 
+            param_shapes,
+            last_student_factor_idx,
+            last_assessment_factor_idx,
+            assessment_interactions, 
+            student_participation, 
+            assessment_participation,
+            regularization_constant):
+            """
+            Evaluate cost function and its gradient at supplied parameter values
+
+            :param np.array params: A flattened, concatenated array of parameter values
+            :param dict[str,tuple] param_shapes: A dictionary mapping parameter name 
+                to shape of np.ndarray
+
+            :param int last_student_factor_idx: Index of last student factor parameter in 
+                flattened params and flattened gradient
+
+            :param int last_assessment_factor_idx: Index of last assessment factor parameter in
+                flattened params and flattened gradient
+
+            :param (np.array,np.array,np.array) assessment_interactions:
+                A tuple of (student indices, assessment indices, outcomes) 
+                for assessment interactions
+
+            :param sparse.csr_array student_participation: A sparse binary matrix of shape
+                [num_unique_students] X [num_assessment_interactions] that encodes which student
+                was involved in each assessment interaction
+
+            :param sparse.csr_array assessment_participation: A sparse binary matrix of shape
+                [num_unique_assessments] X [num_assessment_interactions] that encodes which module
+                was involved in each assessment interaction
+
+            :param float regularization_constant: Coefficient of L2 regularization term
+                for factors
+
+            :rtype: (float,np.array)
+            :return: A tuple of (cost, flattened and concatenated gradient)
+            """
+
+            g = np.empty(params.shape)
+
+            student_factors = np.reshape(
+                    params[:last_student_factor_idx],
+                    param_shapes[models.STUDENT_FACTORS])
+
+            assessment_factors = np.reshape(
+                    params[last_student_factor_idx:last_assessment_factor_idx],
+                    param_shapes[models.ASSESSMENT_FACTORS])
+
+            assessment_offsets = params[last_assessment_factor_idx:]
+
+            student_idxes_of_ixns, assessment_idxes_of_ixns, outcomes = assessment_interactions
+            outcomes = outcomes[:, None]
+
+            student_factors_of_ixns = student_factors[student_idxes_of_ixns, :]
+            assessment_factors_of_ixns = assessment_factors[assessment_idxes_of_ixns, :]
+            assessment_offsets_of_ixns = assessment_offsets[assessment_idxes_of_ixns][:, None]
+
+            exp_diff = np.exp(-outcomes*(np.einsum(
+                'ij, ij->i', 
+                student_factors_of_ixns, 
+                assessment_factors_of_ixns)[:, None] + assessment_offsets_of_ixns))
+            one_plus_exp_diff = 1 + exp_diff
+            mult_diff = outcomes * exp_diff / one_plus_exp_diff
+
+            # gradient wrt student factors
+            g[:last_student_factor_idx] = -student_participation.dot(
+                    mult_diff * assessment_factors_of_ixns).ravel()
+
+            # gradient wrt assessment factors
+            g[last_student_factor_idx:last_assessment_factor_idx] = -assessment_participation.dot(
+                    mult_diff * student_factors_of_ixns).ravel()
+
+            # gradient from norm regularization
+            g[:last_assessment_factor_idx] += \
+                    2 * regularization_constant * params[:last_assessment_factor_idx]
+
+            # gradient wrt assessment offsets
+            g[last_assessment_factor_idx:] = -assessment_participation.dot(mult_diff)[:, 0]
+
+            cost_from_ixns = np.einsum('ij->', np.log(one_plus_exp_diff))
+            cost_from_norm_regularization = regularization_constant * (
+                    params[:last_assessment_factor_idx]**2).sum()
+            cost = cost_from_ixns + cost_from_norm_regularization
+
+            return cost, g
+
+        # random initialization
+        params = np.concatenate((
+            np.random.random(model.student_factors.shape).ravel(), 
+            np.random.random(model.assessment_factors.shape).ravel(),
+            np.random.random(model.assessment_offsets.shape)), axis=0)
+
+        grad_args = (
+                param_shapes,
+                last_student_factor_idx,
+                last_assessment_factor_idx,
+                assessment_interactions,
+                student_participation,
+                assessment_participation,
+                self.regularization_constant)
+ 
+        if self.verify_gradient:
+            self.fd_err = optimize.check_grad(
+                (lambda x, args: gradient(x, *args)[0]),
+                (lambda x, args: gradient(x, *args)[1]),
+                params, grad_args) / math.sqrt(params.size)
+
+            _logger.debug(
+                'RMSE of (forward) finite difference vs. analytic gradient = %f', self.fd_err)
+
+        map_estimates = optimize.minimize(
+                gradient, params, args=grad_args, 
+                method='L-BFGS-B',
+                jac=True,
+                options={
+                    'disp' : self.debug_mode_on, 
+                    'ftol' : self.ftol, 
+                    'maxiter' : self.max_iter})
+        
+        model.student_factors = np.reshape(
+                map_estimates.x[:last_student_factor_idx],
+                param_shapes[models.STUDENT_FACTORS])
+        model.assessment_factors = np.reshape(
+                map_estimates.x[last_student_factor_idx:last_assessment_factor_idx],
+                param_shapes[models.ASSESSMENT_FACTORS])
+        model.assessment_offsets = map_estimates.x[last_assessment_factor_idx:]
 

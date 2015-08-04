@@ -30,7 +30,7 @@ class TimeVaryingLUVModel(object):
 class LinearLUVModel(TimeVaryingLUVModel):
     """
     A model of learning update variances that increases variance
-    linearly with time elapsed since previous interaction
+    linearly with log(time elapsed since previous interaction)
     """
 
     def __init__(self, alpha, beta):
@@ -39,6 +39,7 @@ class LinearLUVModel(TimeVaryingLUVModel):
 
         :param float alpha: Coefficient, which controls how sensitive variance is
             to log(time since previous interaction)
+        
         :param float beta: Offset, which controls the baseline variance
         """
 
@@ -51,6 +52,7 @@ class LinearLUVModel(TimeVaryingLUVModel):
         """
         :param np.array times_since_prev_ixn_for_lesson_ixns:
             Time since the previous interaction, for each lesson interaction
+        
         :rtype: np.array
         :return: A list of Gaussian learning update variances,
             one for each lesson interaction
@@ -62,7 +64,7 @@ class LinearLUVModel(TimeVaryingLUVModel):
 class LogisticLUVModel(TimeVaryingLUVModel):
     """
     A model of learning update variances that increases variance
-    as a function of time elapsed since previous interaction
+    as a function of log(time elapsed since previous interaction)
     passed through the logistic function
     """
 
@@ -72,6 +74,7 @@ class LogisticLUVModel(TimeVaryingLUVModel):
 
         :param float alpha: Coefficient, which controls how sensitive variance is
             to log(time since previous interaction)
+        
         :param float beta: Offset, which controls the baseline variance
         """
 
@@ -84,6 +87,7 @@ class LogisticLUVModel(TimeVaryingLUVModel):
         """
         :param np.array times_since_prev_ixn_for_lesson_ixns:
             Time since the previous interaction, for each lesson interaction
+        
         :rtype: np.array
         :return: A list of Gaussian learning update variances,
             one for each lesson interaction
@@ -115,7 +119,7 @@ class ForgettingModel(object):
 class LinearForgettingModel(ForgettingModel):
     """
     A model of the forgetting effect that increases learning penalties
-    linearly with the time elapsed since the previous interaction
+    linearly with the log(time elapsed since the previous interaction)
     """
 
     def __init__(self, alpha, beta):
@@ -124,6 +128,7 @@ class LinearForgettingModel(ForgettingModel):
 
         :param float alpha: Coefficient, which controls how sensitive the forgetting penalty is
             to log(time since previous interaction)
+        
         :param float beta: Offset, which controls the baseline variance
         """
 
@@ -136,6 +141,7 @@ class LinearForgettingModel(ForgettingModel):
         """
         :param np.array times_since_prev_ixn_for_lesson_ixns:
             Time since the previous interaction, for each lesson interaction
+        
         :rtype: np.array
         :return: A list of penalty terms that get subtracted
             from the means of Gaussian learning updates,
@@ -148,7 +154,7 @@ class LinearForgettingModel(ForgettingModel):
 class LogisticForgettingModel(ForgettingModel):
     """
     A model of the forgetting effect that increases learning penalties
-    as a function of the time elapsed since the previous interaction
+    as a function of the log(time elapsed since the previous interaction)
     passed through the logistic function
     """
 
@@ -158,6 +164,7 @@ class LogisticForgettingModel(ForgettingModel):
 
         :param float alpha: Coefficient, which controls how sensitive the forgetting penalty is
             to log(time since previous interaction)
+        
         :param float beta: Offset, which controls the baseline forgetting penalty
         """
 
@@ -170,6 +177,7 @@ class LogisticForgettingModel(ForgettingModel):
         """
         :param np.array times_since_prev_ixn_for_lesson_ixns:
             Time since the previous interaction, for each lesson interaction
+        
         :rtype: np.array
         :return: A list of penalty terms that get subtracted
             from the means of Gaussian learning updates
