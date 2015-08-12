@@ -844,10 +844,16 @@ class MIRTMAPEstimator(object):
             _logger.debug(
                 'RMSE of (forward) finite difference vs. analytic gradient = %f', self.fd_err)
 
+        bounds_on_assessment_factors = (None, None) if model.using_assessment_factors else (1, 1)
+        bounds = [(None, None)] * model.student_factors.size + [(
+            bounds_on_assessment_factors)] * model.assessment_factors.size + [(
+                None, None)] * model.assessment_offsets.size
+
         map_estimates = optimize.minimize(
                 gradient, params, args=grad_args, 
                 method='L-BFGS-B',
                 jac=True,
+                bounds=bounds,
                 options={
                     'disp' : self.debug_mode_on, 
                     'ftol' : self.ftol, 
