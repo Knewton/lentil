@@ -816,16 +816,20 @@ class MIRTModel(object):
     and f is the logistic function
     """
 
-    def __init__(self, history, dims):
+    def __init__(self, history, dims=2, using_assessment_factors=True):
         """
         Initialize model object
 
         :param datatools.InteractionHistory history: An interaction history
         :param int dims: Number of dimensions
+        :param bool using_assessment_factors: 
+            False => set assessment factors to 1, which is helpful
+            for simulating 1PL IRT (along with setting dims = 1)
         """
 
         self.history = history
         self.dims = dims
+        self.using_assessment_factors = using_assessment_factors
 
         self.student_factors = np.zeros((self.history.num_students(), self.dims))
         self.assessment_factors = np.zeros((self.history.num_assessments(), self.dims))
@@ -849,8 +853,9 @@ class MIRTModel(object):
         :return: A list of pass likelihoods
         """
 
-        student_idxes = df['student_id'].apply(self.history.idx_of_student_id)
-        assessment_idxes = df['module_id'].apply(self.history.idx_of_assessment_id)
+        student_idxes = np.array(df['student_id'].apply(self.history.idx_of_student_id).values)
+        assessment_idxes = np.array(df['module_id'].apply(
+            self.history.idx_of_assessment_id).values)
         
         student_factors_of_ixns = self.student_factors[student_idxes, :]
         assessment_factors_of_ixns = self.assessment_factors[assessment_idxes, :]
