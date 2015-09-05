@@ -476,7 +476,7 @@ class StudentBiasedCoinModel(SkillModel):
                 return 0.5
             try:
                 num_passes = outcomes.value_counts()[True]
-            except IndexError: # student never passed :(
+            except: # student never passed :(
                 num_passes = 0
             return (num_passes + 1) / (len(outcomes) + 2)
 
@@ -578,7 +578,7 @@ class AssessmentBiasedCoinModel(SkillModel):
                 return 0.5
             try:
                 num_passes = outcomes.value_counts()[True]
-            except IndexError: # this assessment was never passed
+            except: # this assessment was never passed
                 num_passes = 0
             return (num_passes + 1) / (len(outcomes) + 2)
 

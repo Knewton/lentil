@@ -317,7 +317,7 @@ class InteractionHistory(object):
     def split_interactions_by_type(
         self,
         filtered_history=None,
-        insert_dummy_lesson_ixns=True):
+        insert_dummy_lesson_ixns=False):
         """
         Split history into assessment interactions and lesson interactions
 

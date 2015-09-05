@@ -184,7 +184,7 @@ def get_assessment_grid_model(
     model.student_biases = np.zeros(num_students)
     model.assessment_biases = np.zeros(num_assessments)
 
-    assessment_idx_map = {id_of_assessment_idx(i):i for i in xrange(num_assessments)}
+    assessment_idx_map = {id_of_assessment_idx(i): i for i in xrange(num_assessments)}
     model.history.compute_idx_maps(assessment_idx=assessment_idx_map)
 
     model.history.squash_timesteps()

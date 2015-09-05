@@ -26,19 +26,23 @@ _logger = logging.getLogger(__name__)
 MIN_NUM_TIMESTEPS_IN_STUDENT_HISTORY = 2
 
 
-class CVResults(object):
+class EvalResults(object):
     """
-    Class for wrapping the results of cross-validation
+    Class for wrapping the results of evaluation on the assessment outcome prediction task
     """
 
-    def __init__(self, raw_results):
+    def __init__(self, raw_results, raw_test_results=None):
         """
         Initialize results object
 
         :param dict[str,list[(float,float)]] raw_results: A dictionary mapping model name to
             a list of tuples (training AUC, validation AUC) across CV runs
+
+        :param dict[str,(float,float)]|None raw_test_results: A dictionary mapping model name to
+            a tuple (training AUC, test AUC)
         """
         self.raw_results = raw_results
+        self.raw_test_results = raw_test_results if raw_test_results is not None else {}
 
     def training_aucs(self, model):
         """
@@ -123,18 +127,31 @@ class CVResults(object):
         return stats.ttest_ind(
                 self.validation_aucs(model_a), self.validation_aucs(model_b), equal_var=True)[1]
 
+    def test_auc(self, model):
+        """
+        Get the test AUC of a model
+
+        :param str model: The name of a model
+        :rtype float|None
+        :return: The test AUC of the model, or None if test results were not supplied
+        """
+
+        return self.raw_test_results[model][1] if model in self.raw_test_results else None
+
     def merge(self, other_results):
         """
         Merge another results object with self (not in-place)
 
-        :param CVResults other_results: A results object
-        :rtype: CVResults
+        :param EvalResults other_results: A results object
+        :rtype: EvalResults
         :return: A combined results object
         """
 
         combined_raw_results = self.raw_results
         combined_raw_results.update(other_results.raw_results)
-        return CVResults(combined_raw_results)
+        combined_raw_test_results = self.raw_test_results
+        combined_raw_test_results.update(other_results.raw_test_results)
+        return EvalResults(combined_raw_results)
 
 def training_auc(
     model, 
@@ -186,7 +203,8 @@ def cross_validated_auc(
     model_builders,
     history,
     num_folds=10,
-    random_truncations=False):
+    random_truncations=False,
+    size_of_test_set=0.2):
     """
     Use k-fold cross-validation to evaluate the predictive power of an
     embedding model on an interaction history
@@ -211,6 +229,9 @@ def cross_validated_auc(
     :param bool random_truncations:
         True => truncate student histories at random locations
         False => truncate student histories just before last batch of assessment interactions
+
+    :param float size_of_test_set: Fraction of students to include in the test set, where
+        0 <= size_of_test_set < 1 (size_of_test_set = 0 => don't compute test AUCs)
 
     :rtype: dict[str,(float,float)]
     :return:
@@ -242,10 +263,11 @@ def cross_validated_auc(
     err = {k: [] for k in models}
 
     # define useful helper functions
-    def get_training_and_validation_sets(left_out_student_ids):
+    def get_training_and_validation_sets(left_in_student_ids, left_out_student_ids):
         """
         Carve out training/validation sets by truncating the histories of left-out students
 
+        :param set[str] left_in_student_ids: Left-in students
         :param set[str] left_out_student_ids: Left-out students
         :rtype: (pd.DataFrame,pd.DataFrame,datatools.SplitHistory,pd.DataFrame)
         :return:
@@ -281,8 +303,7 @@ def cross_validated_auc(
 
         # get training set, which consists of full student histories
         # for "left-in" students, and truncated histories for "left-out" students
-        left_in = np.isnan(truncations)
-        left_out = ~left_in
+        left_in = df['student_id'].isin(left_in_student_ids)
         filtered_history = df[left_in | (left_out & ((
             df['timestep'] <= truncations) | ((df['timestep'] == truncations+1) & (
                 df['module_type'] == datatools.LessonInteraction.MODULETYPE))))]
@@ -290,7 +311,7 @@ def cross_validated_auc(
         # split training set into assessment ixns and lesson ixns
         split_history = history.split_interactions_by_type(
                 filtered_history=filtered_history,
-                insert_dummy_lesson_ixns=True)
+                insert_dummy_lesson_ixns=False)
 
         # get assessment ixns in training set
         train_assessment_interactions = filtered_history[
@@ -400,19 +421,27 @@ def cross_validated_auc(
 
         return err
 
+    num_nontest_students = int((1 - size_of_test_set) * num_students)
+    all_student_ids = history._student_idx.keys()
+    random.shuffle(all_student_ids)
+    id_of_nontest_student_idx = {i: student_id for i, student_id in enumerate(
+        all_student_ids[:num_nontest_students])}
+
     # make train-test splits for CV runs
-    kf = cross_validation.KFold(num_students, n_folds=num_folds, shuffle=True)
+    kf = cross_validation.KFold(num_nontest_students, n_folds=num_folds, shuffle=True)
 
     start_time = time.time()
 
-    for fold_idx, (_, val_student_idxes) in enumerate(kf):
+    for fold_idx, (train_student_idxes, val_student_idxes) in enumerate(kf):
         _logger.info('Processing fold %d of %d', fold_idx+1, num_folds)
 
-        left_out_student_ids = {history.id_of_student_idx(
-            int(student_idx)) for student_idx in val_student_idxes}
+        left_in_student_ids = {id_of_nontest_student_idx[student_idx] \
+                for student_idx in train_student_idxes}
+        left_out_student_ids = {id_of_nontest_student_idx[student_idx] \
+                for student_idx in val_student_idxes}
 
         train_assessment_interactions, filtered_history, split_history, val_interactions = \
-                get_training_and_validation_sets(left_out_student_ids)
+                get_training_and_validation_sets(left_in_student_ids, left_out_student_ids)
 
         train_models(filtered_history, split_history)
 
@@ -423,5 +452,26 @@ def cross_validated_auc(
 
         _logger.info('Running at %f seconds per fold', (time.time() - start_time) / (fold_idx+1))
 
-    return CVResults(err)
+    if size_of_test_set > 0:
+        _logger.info('Computing test AUCs...')
+        nontest_student_ids = set(all_student_ids[:num_nontest_students]) 
+        test_student_ids = set(all_student_ids[num_nontest_students:])
+        
+        train_assessment_interactions, filtered_history, split_history, val_interactions = \
+                get_training_and_validation_sets(left_in_student_ids, left_out_student_ids)
+
+        train_models(filtered_history, split_history)
+
+        train_y_true, train_probas_pred, val_y_true, val_probas_pred = \
+                collect_labels_and_predictions(train_assessment_interactions, val_interactions)
+
+        err = update_err(err)
+
+        test_err = {k: v[-1] for k, v in err.iteritems()}
+        err = {k: v[:-1] for k, v in err.iteritems()}
+    else:
+        test_err = None
+    
+
+    return EvalResults(err, raw_test_results=test_err)
 
