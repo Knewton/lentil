@@ -421,23 +421,18 @@ def cross_validated_auc(
 
         return err
 
-    num_nontest_students = int((1 - size_of_test_set) * num_students)
-    all_student_ids = history._student_idx.keys()
-    random.shuffle(all_student_ids)
-    id_of_nontest_student_idx = {i: student_id for i, student_id in enumerate(
-        all_student_ids[:num_nontest_students])}
-
     # make train-test splits for CV runs
-    kf = cross_validation.KFold(num_nontest_students, n_folds=num_folds, shuffle=True)
+    kf = cross_validation.KFold(
+            num_students - len(history.id_of_nontest_student_idx), n_folds=num_folds, shuffle=True)
 
     start_time = time.time()
 
     for fold_idx, (train_student_idxes, val_student_idxes) in enumerate(kf):
         _logger.info('Processing fold %d of %d', fold_idx+1, num_folds)
 
-        left_in_student_ids = {id_of_nontest_student_idx[student_idx] \
+        left_in_student_ids = {history.id_of_nontest_student_idx[student_idx] \
                 for student_idx in train_student_idxes}
-        left_out_student_ids = {id_of_nontest_student_idx[student_idx] \
+        left_out_student_ids = {history.id_of_nontest_student_idx[student_idx] \
                 for student_idx in val_student_idxes}
 
         train_assessment_interactions, filtered_history, split_history, val_interactions = \
@@ -454,11 +449,11 @@ def cross_validated_auc(
 
     if size_of_test_set > 0:
         _logger.info('Computing test AUCs...')
-        nontest_student_ids = set(all_student_ids[:num_nontest_students]) 
-        test_student_ids = set(all_student_ids[num_nontest_students:])
-        
+        all_student_ids = set(history._student_idx.keys())
+        nontest_student_ids = set(history.id_of_nontest_student_idx.values())
         train_assessment_interactions, filtered_history, split_history, val_interactions = \
-                get_training_and_validation_sets(left_in_student_ids, left_out_student_ids)
+                get_training_and_validation_sets(
+                        nontest_student_ids, all_student_ids - nontest_student_ids)
 
         train_models(filtered_history, split_history)
 

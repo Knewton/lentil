@@ -47,10 +47,10 @@ class Interaction(object):
         :param int timestep: A discretized timestep (strictly positive)
         :param bool|None outcome: Pass/fail for assessment interactions,
             None for lesson interactions
-        
+
         :param int|None duration: A duration (in seconds),
             None if duration is not available
-        
+
         :param str module_type: Lesson/assessment
         """
         if timestep <= 0:
@@ -132,7 +132,7 @@ class AssessmentInteraction(Interaction):
         :param int timestep: A discretized timestep (strictly positive)
         :param bool|None outcome: Pass/fail for assessment interactions
             None for lesson interactions
-        
+
         :param int|None duration: A duration (in seconds). None if duration is N/A.
         """
         super(AssessmentInteraction, self).__init__(
@@ -180,7 +180,8 @@ class InteractionHistory(object):
     Class for an interaction history
     """
 
-    def __init__(self, data, sort_by_timestep=False, reindex_timesteps=False):
+    def __init__(
+        self, data, sort_by_timestep=False, reindex_timesteps=False, size_of_test_set=0.2):
         """
         Initialize interaction history object
 
@@ -199,6 +200,9 @@ class InteractionHistory(object):
 
         :param bool reindex_timesteps:
             True => reindex timesteps to 1,2,3,4,... (from something like 1,3,7,8,...)
+
+        :param float size_of_test_set: Fraction of students to include in test set, where
+            0 <= size_of_test_set < 1 (size_of_test_set = 0 => don't use a test set)
         """
         data.index = range(len(data))
 
@@ -210,7 +214,7 @@ class InteractionHistory(object):
                 sorted(group['timestep'].unique()))} for student_id, group in data.groupby(
                     'student_id')}
             data['timestep'] = data.apply(
-                    lambda ixn: new_timesteps_for_student[ixn['student_id']][ixn['timestep']], 
+                    lambda ixn: new_timesteps_for_student[ixn['student_id']][ixn['timestep']],
                     axis=1)
 
         self.data = data
@@ -225,6 +229,12 @@ class InteractionHistory(object):
 
         # need to add 1 since internal time starts at zero
         self._duration = self.data['timestep'].max() + 1
+
+        all_student_ids = self.data['student_id'].unique()
+        random.shuffle(all_student_ids)
+        num_nontest_students = int((1 - size_of_test_set) * len(all_student_ids))
+        self.id_of_nontest_student_idx = {i: k for i, k in enumerate(
+            all_student_ids[:num_nontest_students])}
 
         # dict[str,int]
         # student_id -> student index
@@ -354,8 +364,8 @@ class InteractionHistory(object):
 
         # the cast to np.array is necessary, otherwise grad.* will complain
         # during parameter estimation
-        assessment_interactions = (np.array(assessment_timesteps, dtype=np.int), 
-                np.array(assessment_idxes, dtype=np.int), 
+        assessment_interactions = (np.array(assessment_timesteps, dtype=np.int),
+                np.array(assessment_idxes, dtype=np.int),
                 np.array(assessment_outcomes, dtype=np.int))
 
         lesson_df = df[df['module_type']==LessonInteraction.MODULETYPE]
@@ -400,7 +410,7 @@ class InteractionHistory(object):
                 assessment_interactions, lesson_interactions, timestep_of_last_interaction)
 
     # TODO: replace these functions with direct calls to the dicts
-    # ...and replace pd.Series.apply(lambda x: id_of_*_idx) with pd.Series.map(dict) 
+    # ...and replace pd.Series.apply(lambda x: id_of_*_idx) with pd.Series.map(dict)
     def id_of_student_idx(self, student_idx):
         """
         Get student id of a student index
@@ -510,7 +520,7 @@ class InteractionHistory(object):
     def num_assessments(self):
         """
         Get number of unique assessment modules
-        
+
         :rtype: int
         :return: Total number of assessments
         """
