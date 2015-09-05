@@ -328,9 +328,6 @@ class EmbeddingMAPEstimator(object):
         lesson_interactions = split_history.lesson_interactions
         timestep_of_last_interaction = split_history.timestep_of_last_interaction
 
-        if len(assessment_interactions) == 0:
-            raise ValueError('No assessment interactions in history!')
-
         grads = grad.get_grad(
             using_scipy=self.using_scipy,
             using_lessons=model.using_lessons,

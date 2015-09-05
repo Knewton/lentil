@@ -1,6 +1,9 @@
 """
 Module for gradients of the cost function in parameter estimation
 
+See https://www.dropbox.com/s/k9qlgn0pd6wtqlw/LSE_Gradient.pdf?dl=0
+for a bunch of equations that summarize most of the functions below
+
 @author Siddharth Reddy <sgr45@cornell.edu>
 """
 

@@ -53,8 +53,8 @@ class EvalResults(object):
         :return: Training AUCs
         """
 
-        return np.array([t for t, _ in self.raw_results[model] if t is not None])
-
+        train_aucs = np.array([t for t, _ in self.raw_results[model] if t is not None])
+        return train_aucs[~np.isnan(train_aucs)]
 
     def validation_aucs(self, model):
         """
@@ -65,7 +65,8 @@ class EvalResults(object):
         :return: Validation AUCs
         """
 
-        return np.array([v for _, v in self.raw_results[model] if v is not None])
+        val_aucs = np.array([v for _, v in self.raw_results[model] if v is not None])
+        return val_aucs[~np.isnan(val_aucs)]
     
     def training_auc_mean(self, model):
         """

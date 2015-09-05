@@ -209,15 +209,10 @@ class InteractionHistory(object):
         if sort_by_timestep:
             data.sort('timestep', axis=0, inplace=True)
 
-        if reindex_timesteps:
-            new_timesteps_for_student = {student_id: {k: (i+1) for i, k in enumerate(
-                sorted(group['timestep'].unique()))} for student_id, group in data.groupby(
-                    'student_id')}
-            data['timestep'] = data.apply(
-                    lambda ixn: new_timesteps_for_student[ixn['student_id']][ixn['timestep']],
-                    axis=1)
-
         self.data = data
+
+        if reindex_timesteps:
+            self.reindex_timesteps()
 
         # optional columns
         if 'time_since_previous_interaction' not in self.data.columns:
@@ -265,6 +260,18 @@ class InteractionHistory(object):
         self._timestep_of_last_interaction = {}
 
         self.compute_idx_maps()
+
+    def reindex_timesteps(self):
+        """
+        See constructor for details
+        """
+
+        new_timesteps_for_student = {student_id: {k: (i+1) for i, k in enumerate(
+            sorted(group['timestep'].unique()))} for student_id, group in self.data.groupby(
+                'student_id')}
+        self.data['timestep'] = self.data.apply(
+                lambda ixn: new_timesteps_for_student[ixn['student_id']][ixn['timestep']],
+                axis=1)
 
     def compute_idx_maps(
         self,
