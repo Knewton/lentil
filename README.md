@@ -19,8 +19,8 @@ You can install the package in your environment with
 python setup.py install
 ```
 
-If you wish to run the tests, simply make sure you have
-[tox](https://tox.readthedocs.org/en/latest/) installed and then simply run
+If you wish to run the tests, make sure you have
+[tox](https://tox.readthedocs.org/en/latest/) installed and then run
 
 ```
 tox
@@ -31,8 +31,8 @@ evaluation are available through `lse_train` and `lse_eval`. The appropriate for
 interaction log data is given in the documentation for `lentil.datatools.InteractionHistory`.
 IPython notebooks used to conduct experiments are available in the `nb` directory, and provide 
 example invocations of most functions and classes. It is recommended that you read the notebooks 
-in the following order: `toy_examples`, `data_explorations`, `model_explorations`, 
-`evaluations`, `sensitivity_analyses`, and `bubble_experiments`.
+in the following order: `toy_examples`, `synthetic_experiments`, `data_explorations`, 
+`model_explorations`, `evaluations`, `sensitivity_analyses`, and `bubble_experiments`.
 
 Documentation
 -------------
