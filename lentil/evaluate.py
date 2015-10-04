@@ -35,11 +35,12 @@ class EvalResults(object):
         """
         Initialize results object
 
-        :param dict[str,list[(float,float)]] raw_results: A dictionary mapping model name to
-            a list of tuples (training AUC, validation AUC) across CV runs
+        :param dict[str,list[(float,float,float,float)]] raw_results: A dictionary mapping model name to
+            a list of tuples (training AUC, validation AUC, validation accuracy, 
+            stdev of validation accuracy) across CV runs
 
-        :param dict[str,(float,float)]|None raw_test_results: A dictionary mapping model name to
-            a tuple (training AUC, test AUC)
+        :param dict[str,(float,float,float,float)]|None raw_test_results: A dictionary mapping model name to
+            a tuple (training AUC, test AUC, test accuracy, stdev of test accuracy)
         """
         self.raw_results = raw_results
         self.raw_test_results = raw_test_results if raw_test_results is not None else {}
@@ -53,7 +54,7 @@ class EvalResults(object):
         :return: Training AUCs
         """
 
-        train_aucs = np.array([t for t, _ in self.raw_results[model] if t is not None])
+        train_aucs = np.array([t[0] for t in self.raw_results[model] if t is not None])
         return train_aucs[~np.isnan(train_aucs)]
 
     def validation_aucs(self, model):
@@ -65,7 +66,7 @@ class EvalResults(object):
         :return: Validation AUCs
         """
 
-        val_aucs = np.array([v for _, v in self.raw_results[model] if v is not None])
+        val_aucs = np.array([t[1] for t in self.raw_results[model] if t is not None])
         return val_aucs[~np.isnan(val_aucs)]
     
     def training_auc_mean(self, model):
@@ -138,6 +139,29 @@ class EvalResults(object):
         """
 
         return self.raw_test_results[model][1] if model in self.raw_test_results else None
+
+    def test_acc(self, model):
+        """
+        Get the test accuracy of a model
+
+        :param str model: The name of a model
+        :rtype float|None
+        :return: The test accuracy of the model, or None if test results were not supplied
+        """
+
+        return self.raw_test_results[model][2] if model in self.raw_test_results else None
+
+    def test_acc_stderr(self, model):
+        """
+        Get the standard error of the test accuracy of a model
+
+        :param str model: The name of a model
+        :rtype float|None
+        :return: The standard error of the test accuracy of the model, or None if the test results
+            were not supplied
+        """
+
+        return self.raw_test_results[model][3] if model in self.raw_test_results else None
 
     def merge(self, other_results):
         """
@@ -404,21 +428,27 @@ def cross_validated_auc(
                 raise ValueError('Tried computing AUC with only one prediction!')
 
             try:
-                val_fpr, val_tpr, _ = metrics.roc_curve(y_true, probas_pred)
+                val_fpr, val_tpr, val_thresholds = metrics.roc_curve(y_true, probas_pred)
                 val_roc_auc = metrics.auc(val_fpr, val_tpr)
             except:
                 _logger.debug('Could not compute validation AUC for y_true and probas_pred:')
                 _logger.debug(y_true)
                 _logger.debug(probas_pred)
                 val_roc_auc = None
+            
+            y_pred = [1 if x>=0.5 else -1 for x in probas_pred]
+            val_acc = np.array([1 if p==t else 0 for p, t in zip(y_pred, y_true)])
 
             # helpful if you want to do a sanity check on AUCs
             # but don't want to wait for all folds to finish running
             _logger.debug('Model = %s', k)
             _logger.debug('Training AUC = %f', train_roc_auc)
             _logger.debug('Validation AUC = %f', val_roc_auc)
+            _logger.debug('Validation Accuracy = %f +/- %f', np.mean(val_acc), 
+                    np.std(val_acc) / np.sqrt(len(val_acc)))
 
-            err[k].append((train_roc_auc, val_roc_auc))
+            err[k].append((train_roc_auc, val_roc_auc, np.mean(val_acc), 
+                np.std(val_acc) / np.sqrt(len(val_acc))))
 
         return err
 
