@@ -434,7 +434,8 @@ class StudentBiasedCoinModel(SkillModel):
     def __init__(
         self,
         history,
-        filtered_history=None):
+        filtered_history=None,
+        name_of_user_id='student_id'):
         """
         Initialize skill model object
 
@@ -450,8 +451,11 @@ class StudentBiasedCoinModel(SkillModel):
         else:
             self.filtered_history = filtered_history
 
+        self.name_of_user_id = name_of_user_id
+
         # student_idx -> probability of the student passing any assessment
-        self._student_pass_likelihoods = np.zeros(self.history.num_students())
+        self.idx_of_user_id = {k: i for i, k in enumerate(self.history.data[self.name_of_user_id].unique())}
+        self._student_pass_likelihoods = np.zeros(len(self.idx_of_user_id))
 
     def fit(self):
         """
@@ -460,7 +464,7 @@ class StudentBiasedCoinModel(SkillModel):
 
         df = self.filtered_history[self.filtered_history['module_type'] == \
                 datatools.AssessmentInteraction.MODULETYPE]
-        df = df.groupby('student_id')
+        df = df.groupby(self.name_of_user_id)
 
         def student_pass_rate(student_id):
             """
@@ -480,9 +484,8 @@ class StudentBiasedCoinModel(SkillModel):
                 num_passes = 0
             return (num_passes + 1) / (len(outcomes) + 2)
 
-        for student_id in self.history.iter_students():
-            self._student_pass_likelihoods[self.history.idx_of_student_id(
-                student_id)] = student_pass_rate(student_id)
+        for user_id, user_idx in self.idx_of_user_id.iteritems():
+            self._student_pass_likelihoods[user_idx] = student_pass_rate(user_id)
 
     def assessment_outcome_log_likelihood(
         self,
@@ -503,11 +506,11 @@ class StudentBiasedCoinModel(SkillModel):
         try:
             if outcome is None:
                 outcome = interaction['outcome']
-            student_id = interaction['student_id']
+            user_id = interaction[self.name_of_user_id]
         except KeyError:
             raise ValueError('Interaction is missing fields!')
 
-        student_idx = self.history.idx_of_student_id(student_id)
+        student_idx = self.idx_of_user_id[student_id]
         pass_likelihood = self._student_pass_likelihoods[student_idx]
         outcome_likelihood = pass_likelihood if outcome else (1 - pass_likelihood)
 
@@ -522,8 +525,8 @@ class StudentBiasedCoinModel(SkillModel):
         :return: A list of pass likelihoods
         """
 
-        return np.array([self._student_pass_likelihoods[student_idx] for student_idx in \
-                df['student_id'].apply(self.history.idx_of_student_id)])
+        return np.array([self._student_pass_likelihoods[user_idx] for user_idx in \
+                df[self.name_of_user_id].map(self.idx_of_user_id)])
 
 class AssessmentBiasedCoinModel(SkillModel):
     """
@@ -636,7 +639,8 @@ class IRTModel(SkillModel):
     def __init__(
         self,
         history,
-        select_regularization_constant=False):
+        select_regularization_constant=False,
+        name_of_user_id='student_id'):
         """
         Initialize IRT model
 
@@ -652,6 +656,7 @@ class IRTModel(SkillModel):
         self.history.index = range(len(self.history))
 
         self.select_regularization_constant = select_regularization_constant
+        self.name_of_user_id = name_of_user_id
 
         self.model = None
 
@@ -659,7 +664,7 @@ class IRTModel(SkillModel):
         # with only lesson interactions. Note that we still want to estimate proficiencies for
         # these students, but they will get regularized to zero due to the absence
         # of any assessment interactions.
-        self.idx_of_student_id = {k: i for i, k in enumerate(history['student_id'].unique())}
+        self.idx_of_student_id = {k: i for i, k in enumerate(history[self.name_of_user_id].unique())}
         self.num_students = len(self.idx_of_student_id)
         self.idx_of_assessment_id = {k: i for i, k in enumerate(history['module_id'].unique())}
         self.num_assessments = len(self.idx_of_assessment_id)
@@ -720,7 +725,7 @@ class IRTModel(SkillModel):
         """
 
         X = np.zeros(self.num_students+self.num_assessments)
-        X[self.idx_of_student_id[interaction['student_id']]] = \
+        X[self.idx_of_student_id[interaction[self.name_of_user_id]]] = \
                 X[self.idx_of_assessment_id[interaction['module_id']]] = 1
 
         log_proba = self.model.predict_log_proba(X)
@@ -761,7 +766,7 @@ class OneParameterLogisticModel(IRTModel):
         :return: A sparse array of dimensions [n_samples] X [n_features]
         """
 
-        student_idxes = np.array(df['student_id'].map(self.idx_of_student_id).values)
+        student_idxes = np.array(df[self.name_of_user_id].map(self.idx_of_student_id).values)
         assessment_idxes = np.array(df['module_id'].map(self.idx_of_assessment_id).values)
 
         num_ixns = len(df)
@@ -791,7 +796,7 @@ class TwoParameterLogisticModel(IRTModel):
         :return: A sparse array of dimensions [n_samples] X [n_features]
         """
 
-        student_idxes = np.array(df['student_id'].map(self.idx_of_student_id).values)
+        student_idxes = np.array(df[self.name_of_user_id].map(self.idx_of_student_id).values)
         assessment_idxes = np.array(df['module_id'].map(self.idx_of_assessment_id).values)
 
         num_ixns = len(df)
