@@ -10,6 +10,7 @@ import logging
 import random
 import time
 import math
+import copy
 
 from matplotlib import pyplot as plt
 from sklearn import cross_validation, metrics
@@ -31,7 +32,7 @@ class EvalResults(object):
     Class for wrapping the results of evaluation on the assessment outcome prediction task
     """
 
-    def __init__(self, raw_results, raw_test_results=None):
+    def __init__(self, raw_results, val_ixn_data, raw_test_results=None):
         """
         Initialize results object
 
@@ -39,10 +40,18 @@ class EvalResults(object):
             a list of tuples (training AUC, validation AUC, validation accuracy, 
             stdev of validation accuracy) across CV runs
 
+        :param list[(list[int],list[int],list[float])] val_ixn_data: A tuple containing
+            (a list of dataframe row indices for validation interactions,
+            a list of y_trues for validation interactions,
+            a dictionary mapping model name to a list of probas_pred for validation interactions) 
+            on each fold
+
+
         :param dict[str,(float,float,float,float)]|None raw_test_results: A dictionary mapping model name to
             a tuple (training AUC, test AUC, test accuracy, stdev of test accuracy)
         """
         self.raw_results = raw_results
+        self.val_ixn_data = val_ixn_data
         self.raw_test_results = raw_test_results if raw_test_results is not None else {}
 
     def training_aucs(self, model):
@@ -287,6 +296,9 @@ def cross_validated_auc(
     # collect errors across CV runs
     err = {k: [] for k in models}
 
+    # collect indices and probas_pred of validation data on each fold
+    val_ixn_data = [None] * num_folds
+
     # define useful helper functions
     def get_training_and_validation_sets(left_in_student_ids, left_out_student_ids):
         """
@@ -453,17 +465,21 @@ def cross_validated_auc(
         return err
 
     # make train-test splits for CV runs
+    if size_of_test_set > 0:
+        id_of_nontest_student_idx = history.id_of_nontest_student_idx
+    else:
+        id_of_nontest_student_idx = history._student_inv_idx
     kf = cross_validation.KFold(
-            num_students - len(history.id_of_nontest_student_idx), n_folds=num_folds, shuffle=True)
+            len(id_of_nontest_student_idx), n_folds=num_folds, shuffle=True)
 
     start_time = time.time()
 
     for fold_idx, (train_student_idxes, val_student_idxes) in enumerate(kf):
         _logger.info('Processing fold %d of %d', fold_idx+1, num_folds)
 
-        left_in_student_ids = {history.id_of_nontest_student_idx[student_idx] \
+        left_in_student_ids = {id_of_nontest_student_idx[student_idx] \
                 for student_idx in train_student_idxes}
-        left_out_student_ids = {history.id_of_nontest_student_idx[student_idx] \
+        left_out_student_ids = {id_of_nontest_student_idx[student_idx] \
                 for student_idx in val_student_idxes}
 
         train_assessment_interactions, filtered_history, split_history, val_interactions = \
@@ -473,6 +489,9 @@ def cross_validated_auc(
 
         train_y_true, train_probas_pred, val_y_true, val_probas_pred = \
                 collect_labels_and_predictions(train_assessment_interactions, val_interactions)
+        
+        val_ixn_data[fold_idx] = (list(val_interactions.index), copy.deepcopy(val_y_true)
+                , copy.deepcopy(val_probas_pred))
 
         err = update_err(err)
 
@@ -499,5 +518,5 @@ def cross_validated_auc(
         test_err = None
     
 
-    return EvalResults(err, raw_test_results=test_err)
+    return EvalResults(err, val_ixn_data, raw_test_results=test_err)
 
